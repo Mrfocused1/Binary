@@ -436,7 +436,7 @@ export class MenuState extends State {
       'Shift - Shoot',
       'P/Escape - Pause',
       '',
-      'MOBILE: Swipe to auto-run, double-tap to stop',
+      'MOBILE: Swipe to move, tap to shoot',
       '',
       'GAMEPLAY:',
       '• Steal loot from traphouses',

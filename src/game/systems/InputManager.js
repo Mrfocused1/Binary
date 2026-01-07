@@ -35,21 +35,20 @@ export class InputManager {
       lastTapTime: 0  // For double-tap to stop
     };
 
+    // Tap to shoot state
+    this.tapShoot = {
+      active: false,  // Whether shoot is triggered this frame
+      tapTime: 0      // When the tap happened
+    };
+
     // Minimum swipe distance to trigger auto-run (in pixels)
     this.swipeThreshold = 30;
     // Double-tap timeout (ms)
     this.doubleTapTimeout = 300;
 
-    // Virtual buttons
+    // Virtual buttons (only pause now, tap anywhere to shoot)
     this.virtualButtons = {
-      shoot: { active: false, touchId: null, x: 0, y: 0, radius: 50 },
       pause: { active: false, touchId: null, x: 0, y: 0, radius: 30 }
-    };
-
-    // Touch zones (will be set based on canvas size)
-    this.touchZones = {
-      shoot: { x: 0, y: 0, radius: 50 },
-      pause: { x: 0, y: 0, radius: 30 }
     };
 
     // Input mappings
@@ -180,19 +179,12 @@ export class InputManager {
         clientY: touch.clientY
       });
 
-      // Check if touch is in shoot button zone (right side, lower)
-      if (pos.x > this.canvas.width * 0.7 && pos.y > this.canvas.height * 0.5) {
-        this.virtualButtons.shoot.active = true;
-        this.virtualButtons.shoot.touchId = touch.identifier;
-        this.virtualButtons.shoot.x = pos.x;
-        this.virtualButtons.shoot.y = pos.y;
-      }
       // Check if touch is in pause zone (top right)
-      else if (pos.x > this.canvas.width * 0.85 && pos.y < this.canvas.height * 0.15) {
+      if (pos.x > this.canvas.width * 0.85 && pos.y < this.canvas.height * 0.15) {
         this.virtualButtons.pause.active = true;
         this.virtualButtons.pause.touchId = touch.identifier;
       }
-      // Movement zone (anywhere else on screen) - start tracking for swipe
+      // All other touches - track for swipe/tap detection
       else {
         // Check for double-tap to stop
         if (now - this.swipeMovement.lastTapTime < this.doubleTapTimeout) {
@@ -202,7 +194,7 @@ export class InputManager {
           this.swipeMovement.y = 0;
           this.swipeMovement.lastTapTime = 0; // Reset to prevent triple-tap issues
         } else {
-          // Start tracking this touch for potential swipe
+          // Start tracking this touch for potential swipe or tap
           this.swipeMovement.touchId = touch.identifier;
           this.swipeMovement.startX = pos.x;
           this.swipeMovement.startY = pos.y;
@@ -226,7 +218,7 @@ export class InputManager {
     for (const touch of event.changedTouches) {
       const pos = this.getTouchCanvasPosition(touch);
 
-      // Check if this was a swipe touch
+      // Check if this was a swipe/tap touch
       if (this.swipeMovement.touchId === touch.identifier) {
         const dx = pos.x - this.swipeMovement.startX;
         const dy = pos.y - this.swipeMovement.startY;
@@ -239,17 +231,13 @@ export class InputManager {
           this.swipeMovement.y = dy / distance;
           this.swipeMovement.active = true;
         } else {
-          // Short tap - record for double-tap detection
+          // Short tap - SHOOT and record for double-tap detection
+          this.tapShoot.active = true;
+          this.tapShoot.tapTime = now;
           this.swipeMovement.lastTapTime = now;
         }
 
         this.swipeMovement.touchId = null;
-      }
-
-      // Release shoot button
-      if (this.virtualButtons.shoot.touchId === touch.identifier) {
-        this.virtualButtons.shoot.active = false;
-        this.virtualButtons.shoot.touchId = null;
       }
 
       // Release pause button
@@ -314,12 +302,15 @@ export class InputManager {
     // Store previous frame's input state
     this.previousKeys = new Map(this.keys);
     this.mouse.previousButtons = new Map(this.mouse.buttons);
-    
+
     // Clear frame events after they've been processed
     // This happens AFTER the game has had a chance to check them
     this.frameKeyPresses.clear();
     this.frameKeyReleases.clear();
-    
+
+    // Clear tap shoot after it's been processed
+    this.tapShoot.active = false;
+
     // Reset wheel delta
     this.mouse.wheel = 0;
   }
@@ -441,9 +432,9 @@ export class InputManager {
     };
   }
 
-  // Check if shoot button is pressed
-  isShootButtonPressed() {
-    return this.virtualButtons.shoot.active;
+  // Check if tap-to-shoot is active
+  isTapShootActive() {
+    return this.tapShoot.active;
   }
 
   // Check if pause button was pressed
@@ -482,9 +473,9 @@ export class InputManager {
     return { x: 0, y: 0 };
   }
 
-  // Check if shooting (keyboard Shift OR touch button)
+  // Check if shooting (keyboard Shift OR tap on mobile)
   isShootingActive() {
-    return this.isActionDown('shoot') || this.isShootButtonPressed();
+    return this.isActionDown('shoot') || this.isTapShootActive();
   }
 
   // Get touch for UI interactions (first active touch)
