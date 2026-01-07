@@ -13,60 +13,40 @@ export class GameOverState extends State {
     this.selectedIndex = 0;
     this.selectSound = null;
     
-    // Video background
-    this.video = null;
-    this.videoLoaded = false;
+    // Background image
+    this.backgroundImage = null;
+    this.backgroundLoaded = false;
   }
-  
+
   enter(data) {
     this.won = data.won || false;
     this.reason = data.reason || '';
     this.selectedIndex = 0;
-    
+
     // Initialize select sound if not already created
     if (!this.selectSound) {
       this.selectSound = new Audio('/menu_select.mp3');
       this.selectSound.volume = 0.7;
     }
-    
+
     // Play "uh oh" sound if player lost
     if (!this.won) {
       const uhOhSound = new Audio('/uh_oh.mp3');
       uhOhSound.volume = 0.6;
       uhOhSound.play().catch(e => console.log('Uh oh sound play failed:', e));
     }
-    
-    // Create and setup video if not already created
-    if (!this.video) {
-      this.video = document.createElement('video');
-      this.video.src = '/menu_background.mp4';
-      this.video.loop = true;
-      this.video.muted = true;
-      this.video.autoplay = true;
-      
-      // Handle various video events for better reliability
-      this.video.addEventListener('canplay', () => {
-        this.videoLoaded = true;
-        this.video.play().catch(e => console.log('Video play failed:', e));
-      });
-      
-      // Also try playing on loadedmetadata
-      this.video.addEventListener('loadedmetadata', () => {
-        this.video.play().catch(e => console.log('Video play on metadata failed:', e));
-      });
-      
-      // Handle errors
-      this.video.addEventListener('error', (e) => {
-        console.error('Video loading error:', e);
-        this.videoLoaded = false;
-      });
-      
-      // Force load the video
-      this.video.load();
-    } else {
-      // Resume playing if returning to game over screen
-      this.videoLoaded = true; // Assume it's loaded if we already created it
-      this.video.play().catch(e => console.log('Video play failed:', e));
+
+    // Load background image if not already loaded
+    if (!this.backgroundImage) {
+      this.backgroundImage = new Image();
+      this.backgroundImage.onload = () => {
+        this.backgroundLoaded = true;
+      };
+      this.backgroundImage.onerror = (e) => {
+        console.error('Background image loading error:', e);
+        this.backgroundLoaded = false;
+      };
+      this.backgroundImage.src = '/game_over_bg.png';
     }
     
     // Collect game stats
@@ -82,10 +62,7 @@ export class GameOverState extends State {
   }
   
   exit() {
-    // Pause video when leaving game over screen
-    if (this.video) {
-      this.video.pause();
-    }
+    // Nothing to clean up for static image
   }
   
   update(deltaTime) {
@@ -144,39 +121,39 @@ export class GameOverState extends State {
   render(renderer, interpolation) {
     const ctx = renderer.ctx;
     const { width, height } = this.game;
-    
-    // Draw video background if loaded
-    if (this.video && this.videoLoaded && !this.video.paused) {
+
+    // Draw background image if loaded
+    if (this.backgroundImage && this.backgroundLoaded) {
       try {
-        // Scale video to cover the entire canvas
-        const videoAspect = this.video.videoWidth / this.video.videoHeight;
+        // Scale image to cover the entire canvas
+        const imgAspect = this.backgroundImage.width / this.backgroundImage.height;
         const canvasAspect = width / height;
-        
+
         let drawWidth, drawHeight, drawX, drawY;
-        
-        if (videoAspect > canvasAspect) {
-          // Video is wider - fit height, crop width
+
+        if (imgAspect > canvasAspect) {
+          // Image is wider - fit height, crop width
           drawHeight = height;
-          drawWidth = height * videoAspect;
+          drawWidth = height * imgAspect;
           drawX = (width - drawWidth) / 2;
           drawY = 0;
         } else {
-          // Video is taller - fit width, crop height
+          // Image is taller - fit width, crop height
           drawWidth = width;
-          drawHeight = width / videoAspect;
+          drawHeight = width / imgAspect;
           drawX = 0;
           drawY = (height - drawHeight) / 2;
         }
-        
-        ctx.drawImage(this.video, drawX, drawY, drawWidth, drawHeight);
+
+        ctx.drawImage(this.backgroundImage, drawX, drawY, drawWidth, drawHeight);
       } catch (e) {
-        // Fallback to solid color if video fails
-        ctx.fillStyle = this.won ? '#4169E1' : '#8B0000';
+        // Fallback to solid color if image fails
+        ctx.fillStyle = '#1a1a2e';
         ctx.fillRect(0, 0, width, height);
       }
     } else {
       // Fallback background color
-      ctx.fillStyle = this.won ? '#4169E1' : '#8B0000';
+      ctx.fillStyle = '#1a1a2e';
       ctx.fillRect(0, 0, width, height);
     }
     
