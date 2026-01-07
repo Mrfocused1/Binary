@@ -227,8 +227,21 @@ export class InputManager {
         // If swipe distance exceeds threshold, set auto-run direction
         if (distance >= this.swipeThreshold) {
           // Normalize the direction
-          this.swipeMovement.x = dx / distance;
-          this.swipeMovement.y = dy / distance;
+          let normX = dx / distance;
+          let normY = dy / distance;
+
+          // Snap to 8 directions (cardinal + diagonal)
+          // Calculate angle and snap to nearest 45-degree increment
+          const angle = Math.atan2(normY, normX);
+          const snappedAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+
+          this.swipeMovement.x = Math.cos(snappedAngle);
+          this.swipeMovement.y = Math.sin(snappedAngle);
+
+          // Clean up tiny floating point errors for cardinal directions
+          if (Math.abs(this.swipeMovement.x) < 0.01) this.swipeMovement.x = 0;
+          if (Math.abs(this.swipeMovement.y) < 0.01) this.swipeMovement.y = 0;
+
           this.swipeMovement.active = true;
         } else {
           // Short tap - SHOOT and record for double-tap detection
