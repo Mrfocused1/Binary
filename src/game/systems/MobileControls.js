@@ -1,17 +1,11 @@
-// MobileControls.js - Visual overlay for touch controls
+// MobileControls.js - Visual overlay for touch controls (swipe-based movement)
 
 export class MobileControls {
   constructor(inputManager, canvas) {
     this.input = inputManager;
     this.canvas = canvas;
 
-    // Control positions (set based on canvas size)
-    this.joystickBase = {
-      x: 120,
-      y: 0, // Set dynamically
-      radius: 60
-    };
-
+    // Shoot button position (set based on canvas size)
     this.shootButton = {
       x: 0, // Set dynamically
       y: 0, // Set dynamically
@@ -24,6 +18,13 @@ export class MobileControls {
       radius: 30
     };
 
+    // Direction indicator (shows current auto-run direction)
+    this.directionIndicator = {
+      x: 120,
+      y: 0, // Set dynamically
+      radius: 50
+    };
+
     // Visual settings
     this.opacity = 0.4;
     this.activeOpacity = 0.7;
@@ -31,9 +32,9 @@ export class MobileControls {
 
   // Update positions based on canvas size
   updateLayout(width, height) {
-    // Joystick in bottom-left
-    this.joystickBase.x = 120;
-    this.joystickBase.y = height - 120;
+    // Direction indicator in bottom-left
+    this.directionIndicator.x = 100;
+    this.directionIndicator.y = height - 100;
 
     // Shoot button in bottom-right
     this.shootButton.x = width - 100;
@@ -54,8 +55,8 @@ export class MobileControls {
 
     ctx.save();
 
-    // Render joystick
-    this.renderJoystick(ctx);
+    // Render direction indicator
+    this.renderDirectionIndicator(ctx);
 
     // Render shoot button
     this.renderShootButton(ctx);
@@ -63,90 +64,73 @@ export class MobileControls {
     // Render pause button
     this.renderPauseButton(ctx);
 
+    // Render swipe hint if not moving
+    this.renderSwipeHint(ctx, width, height);
+
     ctx.restore();
   }
 
-  renderJoystick(ctx) {
-    const joystickState = this.input.getJoystickState();
-    const base = this.joystickBase;
+  renderDirectionIndicator(ctx) {
+    const swipeState = this.input.getSwipeState();
+    const ind = this.directionIndicator;
 
-    // Draw outer ring (base)
+    // Draw outer circle
     ctx.beginPath();
-    ctx.arc(base.x, base.y, base.radius, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(255, 255, 255, ${joystickState.active ? this.activeOpacity : this.opacity})`;
+    ctx.arc(ind.x, ind.y, ind.radius, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255, 255, 255, ${swipeState.active ? this.activeOpacity : this.opacity * 0.5})`;
     ctx.fill();
-    ctx.strokeStyle = `rgba(255, 255, 255, ${joystickState.active ? 0.9 : 0.6})`;
-    ctx.lineWidth = 3;
-    ctx.stroke();
-
-    // Draw direction indicators
-    ctx.fillStyle = `rgba(150, 150, 150, ${this.opacity})`;
-    const indicatorSize = 10;
-
-    // Up arrow
-    ctx.beginPath();
-    ctx.moveTo(base.x, base.y - base.radius + 15);
-    ctx.lineTo(base.x - indicatorSize, base.y - base.radius + 25);
-    ctx.lineTo(base.x + indicatorSize, base.y - base.radius + 25);
-    ctx.closePath();
-    ctx.fill();
-
-    // Down arrow
-    ctx.beginPath();
-    ctx.moveTo(base.x, base.y + base.radius - 15);
-    ctx.lineTo(base.x - indicatorSize, base.y + base.radius - 25);
-    ctx.lineTo(base.x + indicatorSize, base.y + base.radius - 25);
-    ctx.closePath();
-    ctx.fill();
-
-    // Left arrow
-    ctx.beginPath();
-    ctx.moveTo(base.x - base.radius + 15, base.y);
-    ctx.lineTo(base.x - base.radius + 25, base.y - indicatorSize);
-    ctx.lineTo(base.x - base.radius + 25, base.y + indicatorSize);
-    ctx.closePath();
-    ctx.fill();
-
-    // Right arrow
-    ctx.beginPath();
-    ctx.moveTo(base.x + base.radius - 15, base.y);
-    ctx.lineTo(base.x + base.radius - 25, base.y - indicatorSize);
-    ctx.lineTo(base.x + base.radius - 25, base.y + indicatorSize);
-    ctx.closePath();
-    ctx.fill();
-
-    // Draw inner stick
-    let stickX = base.x;
-    let stickY = base.y;
-
-    if (joystickState.active) {
-      // Calculate stick position based on touch
-      const dx = joystickState.currentX - joystickState.centerX;
-      const dy = joystickState.currentY - joystickState.centerY;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      const maxDistance = base.radius - 15;
-
-      if (distance > 0) {
-        const clampedDistance = Math.min(distance, maxDistance);
-        stickX = base.x + (dx / distance) * clampedDistance;
-        stickY = base.y + (dy / distance) * clampedDistance;
-      }
-    }
-
-    // Inner stick
-    ctx.beginPath();
-    ctx.arc(stickX, stickY, 25, 0, Math.PI * 2);
-    ctx.fillStyle = joystickState.active ? 'rgba(0, 200, 255, 0.9)' : 'rgba(100, 100, 100, 0.8)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.strokeStyle = `rgba(255, 255, 255, ${swipeState.active ? 0.9 : 0.4})`;
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Label
-    ctx.font = '12px Arial';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-    ctx.textAlign = 'center';
-    ctx.fillText('MOVE', base.x, base.y + base.radius + 20);
+    if (swipeState.active) {
+      // Draw direction arrow
+      const arrowLength = ind.radius * 0.7;
+      const arrowX = ind.x + swipeState.x * arrowLength;
+      const arrowY = ind.y + swipeState.y * arrowLength;
+
+      // Arrow line
+      ctx.beginPath();
+      ctx.moveTo(ind.x, ind.y);
+      ctx.lineTo(arrowX, arrowY);
+      ctx.strokeStyle = 'rgba(0, 255, 100, 0.9)';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+      // Arrow head
+      const angle = Math.atan2(swipeState.y, swipeState.x);
+      const headSize = 12;
+      ctx.beginPath();
+      ctx.moveTo(arrowX, arrowY);
+      ctx.lineTo(
+        arrowX - headSize * Math.cos(angle - Math.PI / 6),
+        arrowY - headSize * Math.sin(angle - Math.PI / 6)
+      );
+      ctx.lineTo(
+        arrowX - headSize * Math.cos(angle + Math.PI / 6),
+        arrowY - headSize * Math.sin(angle + Math.PI / 6)
+      );
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(0, 255, 100, 0.9)';
+      ctx.fill();
+
+      // "RUNNING" label
+      ctx.font = 'bold 10px Arial';
+      ctx.fillStyle = 'rgba(0, 255, 100, 0.9)';
+      ctx.textAlign = 'center';
+      ctx.fillText('RUNNING', ind.x, ind.y + ind.radius + 15);
+    } else {
+      // Show "SWIPE" text when not moving
+      ctx.font = 'bold 14px Arial';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('SWIPE', ind.x, ind.y);
+
+      // Label below
+      ctx.font = '10px Arial';
+      ctx.fillText('to move', ind.x, ind.y + ind.radius + 15);
+    }
   }
 
   renderShootButton(ctx) {
@@ -216,5 +200,18 @@ export class MobileControls {
     ctx.fillStyle = 'rgba(50, 50, 50, 0.9)';
     ctx.fillRect(btn.x - 10, btn.y - 10, 6, 20);
     ctx.fillRect(btn.x + 4, btn.y - 10, 6, 20);
+  }
+
+  renderSwipeHint(ctx, width, height) {
+    const swipeState = this.input.getSwipeState();
+
+    // Only show hint when not moving
+    if (swipeState.active) return;
+
+    // Show "Double-tap to stop" hint at bottom center
+    ctx.font = '12px Arial';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.textAlign = 'center';
+    ctx.fillText('Double-tap to stop', width / 2, height - 20);
   }
 }

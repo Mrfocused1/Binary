@@ -23,16 +23,22 @@ export class InputManager {
     this.touches = new Map();
     this.isMobile = this.detectMobile();
 
-    // Virtual joystick state
-    this.virtualJoystick = {
-      active: false,
-      touchId: null,
-      centerX: 0,
-      centerY: 0,
-      currentX: 0,
-      currentY: 0,
-      radius: 60 // Max distance from center
+    // Swipe-based movement state (auto-run in swiped direction)
+    this.swipeMovement = {
+      x: 0,           // Current movement direction (-1 to 1)
+      y: 0,
+      active: false,  // Whether auto-run is active
+      touchId: null,  // Touch ID for swipe tracking
+      startX: 0,      // Swipe start position
+      startY: 0,
+      startTime: 0,   // For velocity calculation
+      lastTapTime: 0  // For double-tap to stop
     };
+
+    // Minimum swipe distance to trigger auto-run (in pixels)
+    this.swipeThreshold = 30;
+    // Double-tap timeout (ms)
+    this.doubleTapTimeout = 300;
 
     // Virtual buttons
     this.virtualButtons = {
@@ -42,7 +48,6 @@ export class InputManager {
 
     // Touch zones (will be set based on canvas size)
     this.touchZones = {
-      joystick: { x: 0, y: 0, width: 0, height: 0 },
       shoot: { x: 0, y: 0, radius: 50 },
       pause: { x: 0, y: 0, radius: 30 }
     };
@@ -161,6 +166,8 @@ export class InputManager {
   
   handleTouchStart(event) {
     event.preventDefault();
+    const now = Date.now();
+
     for (const touch of event.changedTouches) {
       const pos = this.getTouchCanvasPosition(touch);
 
@@ -173,17 +180,8 @@ export class InputManager {
         clientY: touch.clientY
       });
 
-      // Check if touch is in joystick zone (left half of screen)
-      if (pos.x < this.canvas.width / 2 && !this.virtualJoystick.active) {
-        this.virtualJoystick.active = true;
-        this.virtualJoystick.touchId = touch.identifier;
-        this.virtualJoystick.centerX = pos.x;
-        this.virtualJoystick.centerY = pos.y;
-        this.virtualJoystick.currentX = pos.x;
-        this.virtualJoystick.currentY = pos.y;
-      }
       // Check if touch is in shoot button zone (right side, lower)
-      else if (pos.x > this.canvas.width * 0.7 && pos.y > this.canvas.height * 0.5) {
+      if (pos.x > this.canvas.width * 0.7 && pos.y > this.canvas.height * 0.5) {
         this.virtualButtons.shoot.active = true;
         this.virtualButtons.shoot.touchId = touch.identifier;
         this.virtualButtons.shoot.x = pos.x;
@@ -193,6 +191,23 @@ export class InputManager {
       else if (pos.x > this.canvas.width * 0.85 && pos.y < this.canvas.height * 0.15) {
         this.virtualButtons.pause.active = true;
         this.virtualButtons.pause.touchId = touch.identifier;
+      }
+      // Movement zone (anywhere else on screen) - start tracking for swipe
+      else {
+        // Check for double-tap to stop
+        if (now - this.swipeMovement.lastTapTime < this.doubleTapTimeout) {
+          // Double-tap detected - stop movement
+          this.swipeMovement.active = false;
+          this.swipeMovement.x = 0;
+          this.swipeMovement.y = 0;
+          this.swipeMovement.lastTapTime = 0; // Reset to prevent triple-tap issues
+        } else {
+          // Start tracking this touch for potential swipe
+          this.swipeMovement.touchId = touch.identifier;
+          this.swipeMovement.startX = pos.x;
+          this.swipeMovement.startY = pos.y;
+          this.swipeMovement.startTime = now;
+        }
       }
     }
 
@@ -206,11 +221,29 @@ export class InputManager {
 
   handleTouchEnd(event) {
     event.preventDefault();
+    const now = Date.now();
+
     for (const touch of event.changedTouches) {
-      // Release joystick if this was the joystick touch
-      if (this.virtualJoystick.touchId === touch.identifier) {
-        this.virtualJoystick.active = false;
-        this.virtualJoystick.touchId = null;
+      const pos = this.getTouchCanvasPosition(touch);
+
+      // Check if this was a swipe touch
+      if (this.swipeMovement.touchId === touch.identifier) {
+        const dx = pos.x - this.swipeMovement.startX;
+        const dy = pos.y - this.swipeMovement.startY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        // If swipe distance exceeds threshold, set auto-run direction
+        if (distance >= this.swipeThreshold) {
+          // Normalize the direction
+          this.swipeMovement.x = dx / distance;
+          this.swipeMovement.y = dy / distance;
+          this.swipeMovement.active = true;
+        } else {
+          // Short tap - record for double-tap detection
+          this.swipeMovement.lastTapTime = now;
+        }
+
+        this.swipeMovement.touchId = null;
       }
 
       // Release shoot button
@@ -245,12 +278,6 @@ export class InputManager {
         touchData.y = pos.y;
         touchData.clientX = touch.clientX;
         touchData.clientY = touch.clientY;
-
-        // Update joystick position
-        if (this.virtualJoystick.touchId === touch.identifier) {
-          this.virtualJoystick.currentX = pos.x;
-          this.virtualJoystick.currentY = pos.y;
-        }
       }
     }
 
@@ -403,28 +430,14 @@ export class InputManager {
            (navigator.maxTouchPoints > 0);
   }
 
-  // Get virtual joystick movement vector (returns {x, y} normalized)
-  getVirtualJoystickVector() {
-    if (!this.virtualJoystick.active) {
+  // Get swipe-based auto-run direction
+  getSwipeMovementVector() {
+    if (!this.swipeMovement.active) {
       return { x: 0, y: 0 };
     }
-
-    const dx = this.virtualJoystick.currentX - this.virtualJoystick.centerX;
-    const dy = this.virtualJoystick.currentY - this.virtualJoystick.centerY;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-
-    if (distance < 10) { // Dead zone
-      return { x: 0, y: 0 };
-    }
-
-    // Normalize and clamp
-    const maxDistance = this.virtualJoystick.radius;
-    const clampedDistance = Math.min(distance, maxDistance);
-    const normalizedDistance = clampedDistance / maxDistance;
-
     return {
-      x: (dx / distance) * normalizedDistance,
-      y: (dy / distance) * normalizedDistance
+      x: this.swipeMovement.x,
+      y: this.swipeMovement.y
     };
   }
 
@@ -438,7 +451,7 @@ export class InputManager {
     return this.virtualButtons.pause.active;
   }
 
-  // Get combined movement vector (keyboard + touch)
+  // Get combined movement vector (keyboard + swipe auto-run)
   getMovementVector() {
     let x = 0;
     let y = 0;
@@ -449,21 +462,24 @@ export class InputManager {
     if (this.isActionDown('moveUp')) y -= 1;
     if (this.isActionDown('moveDown')) y += 1;
 
-    // Touch input (virtual joystick)
-    const joystick = this.getVirtualJoystickVector();
-    if (joystick.x !== 0 || joystick.y !== 0) {
-      x = joystick.x;
-      y = joystick.y;
+    // If keyboard is being used, it overrides swipe movement
+    if (x !== 0 || y !== 0) {
+      // Normalize diagonal movement for keyboard
+      if (x !== 0 && y !== 0) {
+        const length = Math.sqrt(x * x + y * y);
+        x /= length;
+        y /= length;
+      }
+      return { x, y };
     }
 
-    // Normalize diagonal movement (only for keyboard, joystick is already normalized)
-    if (x !== 0 && y !== 0 && !this.virtualJoystick.active) {
-      const length = Math.sqrt(x * x + y * y);
-      x /= length;
-      y /= length;
+    // Touch input (swipe-based auto-run)
+    const swipe = this.getSwipeMovementVector();
+    if (swipe.x !== 0 || swipe.y !== 0) {
+      return swipe;
     }
 
-    return { x, y };
+    return { x: 0, y: 0 };
   }
 
   // Check if shooting (keyboard Shift OR touch button)
@@ -485,15 +501,12 @@ export class InputManager {
     return this.touches.size > 0;
   }
 
-  // Get joystick state for rendering
-  getJoystickState() {
+  // Get swipe movement state for rendering
+  getSwipeState() {
     return {
-      active: this.virtualJoystick.active,
-      centerX: this.virtualJoystick.centerX,
-      centerY: this.virtualJoystick.centerY,
-      currentX: this.virtualJoystick.currentX,
-      currentY: this.virtualJoystick.currentY,
-      radius: this.virtualJoystick.radius
+      active: this.swipeMovement.active,
+      x: this.swipeMovement.x,
+      y: this.swipeMovement.y
     };
   }
 
@@ -503,5 +516,12 @@ export class InputManager {
       shoot: this.virtualButtons.shoot.active,
       pause: this.virtualButtons.pause.active
     };
+  }
+
+  // Stop swipe movement (can be called externally)
+  stopSwipeMovement() {
+    this.swipeMovement.active = false;
+    this.swipeMovement.x = 0;
+    this.swipeMovement.y = 0;
   }
 }
