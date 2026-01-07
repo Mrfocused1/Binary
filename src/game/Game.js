@@ -60,24 +60,7 @@ export class Game {
   setupCanvas() {
     this.canvas.width = this.width;
     this.canvas.height = this.height;
-    
-    // Handle window resize
-    this.handleResize();
-    window.addEventListener('resize', () => this.handleResize());
-  }
-  
-  handleResize() {
-    const container = this.canvas.parentElement;
-    const containerWidth = container.clientWidth;
-    const containerHeight = container.clientHeight;
-    
-    const scale = Math.min(
-      containerWidth / this.width,
-      containerHeight / this.height
-    );
-    
-    this.canvas.style.width = `${this.width * scale}px`;
-    this.canvas.style.height = `${this.height * scale}px`;
+    // Fixed size - no scaling/resizing
   }
   
   async init() {
