@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     // Initialize and start the game
     await game.init();
-    console.log('Library Survivors initialized successfully!');
+    console.log('Bine % Chalk initialized successfully!');
     console.log('Current state:', game.stateManager.currentState?.name);
   } catch (error) {
     console.error('Failed to initialize game:', error);

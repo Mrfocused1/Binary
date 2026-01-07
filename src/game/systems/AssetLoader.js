@@ -171,10 +171,10 @@ export class AssetLoader {
   // Generate placeholder assets for development
   generatePlaceholderAssets() {
     // Player sprite
-    this.assets.set('librarian', this.createPlaceholderImage(32, 48, '#4169E1', 'P'));
+    this.assets.set('chronik', this.createPlaceholderImage(32, 48, '#4169E1', 'C'));
     
-    // Kid sprite
-    this.assets.set('kid', this.createPlaceholderImage(24, 36, '#FF6347', 'K'));
+    // Opp sprite
+    this.assets.set('opp', this.createPlaceholderImage(24, 36, '#FF6347', 'O'));
     
     // Book sprite
     this.assets.set('book', this.createPlaceholderImage(16, 20, '#8B4513', 'B'));

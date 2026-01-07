@@ -1,4 +1,5 @@
 import { Entity } from './Entity.js';
+import { Projectile } from './Projectile.js';
 
 export class Player extends Entity {
   constructor(game, x, y) {
@@ -8,25 +9,35 @@ export class Player extends Entity {
     // Stats (from design doc)
     this.stats = {
       moveSpeed: 3, // meters per second (assuming 1 meter = 32 pixels)
-      pickupRadius: 1,
-      returnRadius: 0.5, // Half a tile - must be touching shelf
+      pickupRadius: 1.0, // 1.0 meters (32 pixels) - reasonable pickup range
+      returnRadius: 1.0, // 1.0 meters (32 pixels) - reasonable deposit range
       carrySlots: 5,
       stamina: 100,
       maxStamina: 100,
       chaosDampening: 0,
       xpMultiplier: 1.0 // For Reading Glasses upgrade
     };
+
+    // Health system
+    this.health = 100;
+    this.maxHealth = 100;
+    this.isDead = false;
     
     // Upgrade tracking
     this.upgradeLevels = {};
     
     // Movement
     this.baseSpeed = this.stats.moveSpeed * 32; // Convert to pixels/second
-    this.sprintMultiplier = 1.5;
-    this.isSprinting = false;
+
+    // Shooting
+    this.shootCooldown = 0.5; // seconds between shots
+    this.shootTimer = 0; // current cooldown timer
+    this.isShooting = false; // for shooting animation
+    this.shootAnimationDuration = 0.2; // how long to show shooting sprite
+    this.shootAnimationTimer = 0;
     
-    // Books carried
-    this.carriedBooks = [];
+    // Loot carried
+    this.carriedLoot = [];
     
     // Animation
     this.facing = 'down'; // up, down, left, right
@@ -53,40 +64,34 @@ export class Player extends Entity {
   
   update(deltaTime) {
     const input = this.game.inputManager;
-    
+
     // Get movement input
     const movement = input.getMovementVector();
-    
-    // Handle sprinting
-    this.isSprinting = input.isActionDown('sprint') && this.stats.stamina > 0;
-    
-    if (this.isSprinting) {
-      // Drain stamina while sprinting
-      this.stats.stamina -= 20 * deltaTime; // 20 stamina per second
-      this.stats.stamina = Math.max(0, this.stats.stamina);
-    } else {
-      // Regenerate stamina when not sprinting
-      this.stats.stamina += 10 * deltaTime; // 10 stamina per second
-      this.stats.stamina = Math.min(this.stats.maxStamina, this.stats.stamina);
+
+    // Update shoot cooldown
+    if (this.shootTimer > 0) {
+      this.shootTimer -= deltaTime;
     }
-    
-    // Handle out of breath sound
-    if (input.isActionDown('sprint') && this.stats.stamina < 1) {
-      // Player is holding shift but has very low stamina
-      if (!this.isPlayingOutOfBreath) {
-        this.playOutOfBreathSound();
-        this.isPlayingOutOfBreath = true;
-      }
-    } else {
-      // Stop the sound if they release shift or regain stamina
-      if (this.isPlayingOutOfBreath) {
-        this.stopOutOfBreathSound();
-        this.isPlayingOutOfBreath = false;
+
+    // Handle shooting (Shift key)
+    if (input.isActionPressed('shoot') && this.shootTimer <= 0) {
+      this.shoot();
+    }
+
+    // Update shooting animation
+    if (this.isShooting) {
+      this.shootAnimationTimer -= deltaTime;
+      if (this.shootAnimationTimer <= 0) {
+        this.isShooting = false;
       }
     }
-    
-    // Calculate speed - only apply sprint multiplier if we have stamina
-    const currentSpeed = this.baseSpeed * (this.isSprinting && this.stats.stamina > 0 ? this.sprintMultiplier : 1);
+
+    // Regenerate stamina passively (kept for potential future use)
+    this.stats.stamina += 10 * deltaTime;
+    this.stats.stamina = Math.min(this.stats.maxStamina, this.stats.stamina);
+
+    // Calculate speed (no sprint multiplier anymore)
+    const currentSpeed = this.baseSpeed;
     
     // Apply movement
     this.vx = movement.x * currentSpeed;
@@ -96,25 +101,32 @@ export class Player extends Entity {
     const newX = this.x + this.vx * deltaTime;
     const newY = this.y + this.vy * deltaTime;
     
-    // Check collisions with shelves
+    // Check collisions with traphouses and safe house
     const state = this.game.stateManager.currentState;
     let canMoveX = true;
     let canMoveY = true;
-    
-    if (state && state.shelves) {
-      for (const shelf of state.shelves) {
-        // Check X movement
-        if (this.checkCollision(newX, this.y, shelf)) {
-          canMoveX = false;
-        }
-        // Check Y movement
-        if (this.checkCollision(this.x, newY, shelf)) {
-          canMoveY = false;
-        }
-        // Check diagonal movement if both X and Y are blocked
-        if (!canMoveX && !canMoveY && this.checkCollision(newX, newY, shelf)) {
-          break; // Already blocked in both directions
-        }
+
+    // Get all buildings to check collision against
+    const buildings = [];
+    if (state && state.traphouses) {
+      buildings.push(...state.traphouses);
+    }
+    if (state && state.safeHouse) {
+      buildings.push(state.safeHouse);
+    }
+
+    for (const building of buildings) {
+      // Check X movement
+      if (this.checkCollision(newX, this.y, building)) {
+        canMoveX = false;
+      }
+      // Check Y movement
+      if (this.checkCollision(this.x, newY, building)) {
+        canMoveY = false;
+      }
+      // Check diagonal movement if both X and Y are blocked
+      if (!canMoveX && !canMoveY && this.checkCollision(newX, newY, building)) {
+        break; // Already blocked in both directions
       }
     }
     
@@ -150,7 +162,7 @@ export class Player extends Entity {
     this.isMoving = this.vx !== 0 || this.vy !== 0;
     if (this.isMoving) {
       this.animationTimer += deltaTime;
-      if (this.animationTimer >= 0.2) {
+      if (this.animationTimer >= 0.4) {
         this.animationFrame = (this.animationFrame + 1) % 2; // Alternate between 2 frames
         this.animationTimer = 0;
       }
@@ -164,19 +176,42 @@ export class Player extends Entity {
   }
   
   render(ctx, interpolation) {
-    // Get appropriate sprite based on animation frame
+    // Get appropriate sprite based on animation frame and facing direction
     let sprite;
-    if (this.isMoving) {
-      sprite = this.animationFrame === 0 
-        ? this.game.assetLoader.getImage('librarianWalk1')
-        : this.game.assetLoader.getImage('librarianWalk2');
+
+    // Shooting animation takes priority
+    if (this.isShooting) {
+      if (this.facing === 'down') {
+        sprite = this.game.assetLoader.getImage('chronikShootDown');
+      } else if (this.facing === 'up') {
+        sprite = this.game.assetLoader.getImage('chronikShootUp');
+      } else {
+        sprite = this.game.assetLoader.getImage('chronikShootSide');
+      }
+    } else if (this.isMoving) {
+      if (this.facing === 'down') {
+        // Use down-facing walk sprites
+        sprite = this.animationFrame === 0
+          ? this.game.assetLoader.getImage('chronikWalkDown1')
+          : this.game.assetLoader.getImage('chronikWalkDown2');
+      } else if (this.facing === 'up') {
+        // Use up-facing walk sprites
+        sprite = this.animationFrame === 0
+          ? this.game.assetLoader.getImage('chronikWalkUp1')
+          : this.game.assetLoader.getImage('chronikWalkUp2');
+      } else {
+        // Use side-facing walk sprites (left/right)
+        sprite = this.animationFrame === 0
+          ? this.game.assetLoader.getImage('chronikWalk1')
+          : this.game.assetLoader.getImage('chronikWalk2');
+      }
     } else {
-      sprite = this.game.assetLoader.getImage('librarianStand'); // Use standing sprite when not moving
+      sprite = this.game.assetLoader.getImage('chronikStand'); // Use standing sprite when not moving
     }
-    
+
     // Fallback to placeholder if sprites not loaded
     if (!sprite) {
-      sprite = this.game.assetLoader.getImage('librarian');
+      sprite = this.game.assetLoader.getImage('chronik');
     }
     
     // Draw speed trail effect if moving fast with upgrades
@@ -199,7 +234,7 @@ export class Player extends Entity {
             this.width,
             this.height,
             {
-              flipX: this.lastHorizontalFacing === 'right' // Use last horizontal direction for flipping
+              flipX: (this.facing === 'left' || this.facing === 'right') && this.lastHorizontalFacing === 'right' // Only flip side-facing sprites
             }
           );
         }
@@ -209,7 +244,7 @@ export class Player extends Entity {
     
     if (!sprite) return;
     
-    // Draw sprite with direction flipping
+    // Draw sprite with direction flipping (don't flip down-facing sprites)
     this.game.renderer.drawSprite(
       sprite,
       this.x,
@@ -217,7 +252,7 @@ export class Player extends Entity {
       this.width,
       this.height,
       {
-        flipX: this.lastHorizontalFacing === 'right' // Use last horizontal direction for flipping
+        flipX: (this.facing === 'left' || this.facing === 'right') && this.lastHorizontalFacing === 'right'
       }
     );
     
@@ -290,79 +325,106 @@ export class Player extends Entity {
       ctx.restore();
     }
     
-    // Draw carried books indicator with colors
-    if (this.carriedBooks.length > 0) {
+    // Draw carried loot indicator with colors
+    if (this.carriedLoot.length > 0) {
       ctx.save();
-      
-      // Draw book count
+
+      // Draw loot count
       ctx.fillStyle = '#000';
       ctx.font = 'bold 12px Arial';
       ctx.textAlign = 'center';
       ctx.fillText(
-        `${this.carriedBooks.length}/${this.stats.carrySlots}`,
+        `${this.carriedLoot.length}/${this.stats.carrySlots}`,
         this.getCenterX(),
         this.y - 5
       );
-      
-      // Draw colored indicators for each book type
-      const bookColors = {};
-      this.carriedBooks.forEach(book => {
-        bookColors[book.color] = (bookColors[book.color] || 0) + 1;
+
+      // Draw colored indicators for each loot type
+      const lootColors = {};
+      this.carriedLoot.forEach(item => {
+        lootColors[item.color] = (lootColors[item.color] || 0) + 1;
       });
-      
+
       let offsetX = -20;
-      Object.entries(bookColors).forEach(([color, count]) => {
-        // Draw colored circle for each book type
-        const colorHex = this.getBookColorHex(color);
+      Object.entries(lootColors).forEach(([color, count]) => {
+        // Draw colored circle for each loot type
+        const colorHex = this.getLootColorHex(color);
         ctx.fillStyle = colorHex;
         ctx.strokeStyle = '#000';
         ctx.lineWidth = 1;
-        
+
         ctx.beginPath();
         ctx.arc(this.getCenterX() + offsetX, this.y - 20, 6, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
-        
+
         // Draw count if more than 1
         if (count > 1) {
           ctx.fillStyle = '#fff';
           ctx.font = 'bold 8px Arial';
           ctx.fillText(count.toString(), this.getCenterX() + offsetX, this.y - 17);
         }
-        
+
         offsetX += 15;
       });
-      
+
       ctx.restore();
     }
+
+    // Draw health bar above player
+    this.renderHealthBar(ctx);
   }
-  
-  pickupBook(book) {
-    if (this.carriedBooks.length >= this.stats.carrySlots) {
+
+  renderHealthBar(ctx) {
+    const barWidth = 50;
+    const barHeight = 6;
+    const barX = this.getCenterX() - barWidth / 2;
+    const barY = this.y - 35;
+
+    // Background (black)
+    ctx.fillStyle = '#000';
+    ctx.fillRect(barX - 1, barY - 1, barWidth + 2, barHeight + 2);
+
+    // Red background (damage)
+    ctx.fillStyle = '#ff0000';
+    ctx.fillRect(barX, barY, barWidth, barHeight);
+
+    // Green health
+    const healthPercent = this.health / this.maxHealth;
+    ctx.fillStyle = '#00ff00';
+    ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
+  }
+
+  takeDamage(amount) {
+    if (this.isDead) return;
+
+    this.health -= amount;
+    if (this.health <= 0) {
+      this.health = 0;
+      this.isDead = true;
+    }
+  }
+
+  pickupLoot(item) {
+    if (this.carriedLoot.length >= this.stats.carrySlots) {
       return false;
     }
-    
-    this.carriedBooks.push(book);
+
+    this.carriedLoot.push(item);
     return true;
   }
-  
-  shelveBook(shelf) {
-    // Find a book that matches this shelf's color
-    const bookIndex = this.carriedBooks.findIndex(
-      book => book.color === shelf.color
-    );
-    
-    if (bookIndex !== -1) {
-      const book = this.carriedBooks.splice(bookIndex, 1)[0];
-      return book;
+
+  stashLoot() {
+    // Remove and return the first item from carried loot
+    if (this.carriedLoot.length > 0) {
+      return this.carriedLoot.shift();
     }
-    
     return null;
   }
-  
-  dropAllBooks() {
-    const dropped = [...this.carriedBooks];
-    this.carriedBooks = [];
+
+  dropAllLoot() {
+    const dropped = [...this.carriedLoot];
+    this.carriedLoot = [];
     return dropped;
   }
   
@@ -424,7 +486,7 @@ export class Player extends Entity {
              playerBottom <= entityTop);
   }
   
-  getBookColorHex(color) {
+  getLootColorHex(color) {
     const colors = {
       red: '#ff4444',
       blue: '#4444ff',
@@ -456,5 +518,28 @@ export class Player extends Entity {
     // Stop all sounds when player is cleaned up
     this.stopOutOfBreathSound();
     this.isPlayingOutOfBreath = false;
+  }
+
+  shoot() {
+    // Create projectile at player center
+    const projectile = new Projectile(
+      this.game,
+      this.getCenterX() - 8, // Center the 16x16 projectile
+      this.getCenterY() - 8,
+      this.facing
+    );
+
+    // Add to game state
+    const state = this.game.stateManager.currentState;
+    if (state && state.addProjectile) {
+      state.addProjectile(projectile);
+    }
+
+    // Reset cooldown
+    this.shootTimer = this.shootCooldown;
+
+    // Start shooting animation
+    this.isShooting = true;
+    this.shootAnimationTimer = this.shootAnimationDuration;
   }
 }

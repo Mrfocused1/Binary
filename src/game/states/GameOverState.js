@@ -74,10 +74,10 @@ export class GameOverState extends State {
     this.stats = {
       timeElapsed: Math.floor(gameData.elapsedTime),
       level: gameData.playerLevel,
-      chaosLevel: Math.floor(gameData.chaosLevel),
-      booksCollected: gameData.booksCollected || 0,
-      booksShelved: gameData.booksShelved || 0,
-      kidsRepelled: gameData.kidsRepelled || 0,
+      beefLevel: Math.floor(gameData.beefLevel),
+      lootCollected: gameData.lootCollected || 0,
+      lootStashed: gameData.lootStashed || 0,
+      oppsRepelled: gameData.oppsRepelled || 0,
     };
   }
   
@@ -224,11 +224,13 @@ export class GameOverState extends State {
     ctx.fillStyle = '#3d2914';
     ctx.font = '24px Arial';
     if (this.won) {
-      ctx.fillText('You survived 30 minutes of library chaos!', width / 2, boxY + 130);
+      ctx.fillText('You survived 30 minutes on the streets!', width / 2, boxY + 130);
     } else {
-      let message = 'The library descended into chaos...';
-      if (this.reason === 'chaos') {
-        message = 'The chaos overwhelmed the library!';
+      let message = 'The streets got too hot...';
+      if (this.reason === 'beef') {
+        message = 'Too much beef!';
+      } else if (this.reason === 'killed') {
+        message = 'You were taken out by the opps!';
       }
       ctx.fillText(message, width / 2, boxY + 130);
     }
@@ -245,10 +247,10 @@ export class GameOverState extends State {
     const statLines = [
       `Time Survived: ${minutes}:${seconds.toString().padStart(2, '0')}`,
       `Final Level: ${this.stats.level}`,
-      `Peak Chaos: ${this.stats.chaosLevel}%`,
-      `Books Collected: ${this.stats.booksCollected}`,
-      `Books Shelved: ${this.stats.booksShelved}`,
-      `Kids Repelled: ${this.stats.kidsRepelled}`
+      `Peak Beef: ${this.stats.beefLevel}%`,
+      `Loot Collected: ${this.stats.lootCollected}`,
+      `Loot Stashed: ${this.stats.lootStashed}`,
+      `Bodies: ${this.stats.oppsRepelled}`
     ];
     
     statLines.forEach(line => {

@@ -53,7 +53,7 @@ export class Game {
       // Stats tracking
       booksCollected: 0,
       booksShelved: 0,
-      kidsRepelled: 0
+      oppsRepelled: 0
     };
   }
   
@@ -109,16 +109,25 @@ export class Game {
     const assets = {
       images: {
         woodFloor: `/sprites/wood_floor_tiles.jpg${cacheBuster}`,
-        librarianStand: `/sprites/librarian_stand.png${cacheBuster}`,
-        librarianWalk1: `/sprites/librarian_walk1.png${cacheBuster}`,
-        librarianWalk2: `/sprites/librarian_walk2.png${cacheBuster}`,
-        // Kid sprites
-        kid1Stand: `/sprites/kid1_stand.png${cacheBuster}`,
-        kid1Walk: `/sprites/kid1_walk.png${cacheBuster}`,
-        kid2Stand: `/sprites/kid2_stand.png${cacheBuster}`,
-        kid2Walk: `/sprites/kid2_walk.png${cacheBuster}`,
-        kid3Stand: `/sprites/kid3_stand.png${cacheBuster}`,
-        kid3Walk: `/sprites/kid3_walk.png${cacheBuster}`
+        chronikStand: `/sprites/chronik_stand.png${cacheBuster}`,
+        chronikWalk1: `/sprites/chronik_walk1.png${cacheBuster}`,
+        chronikWalk2: `/sprites/chronik_walk2.png${cacheBuster}`,
+        chronikWalkDown1: `/sprites/chronik_walk_down1.png${cacheBuster}`,
+        chronikWalkDown2: `/sprites/chronik_walk_down2.png${cacheBuster}`,
+        chronikWalkUp1: `/sprites/chronik_walk_up1.png${cacheBuster}`,
+        chronikWalkUp2: `/sprites/chronik_walk_up2.png${cacheBuster}`,
+        chronikShootSide: `/sprites/chronik_shoot_side.png${cacheBuster}`,
+        chronikShootDown: `/sprites/chronik_shoot_down.png${cacheBuster}`,
+        chronikShootUp: `/sprites/chronik_shoot_up.png${cacheBuster}`,
+        // Opp sprites
+        opp1Stand: `/sprites/opp1_stand.png${cacheBuster}`,
+        opp1Walk: `/sprites/opp1_walk.png${cacheBuster}`,
+        opp2Stand: `/sprites/opp2_stand.png${cacheBuster}`,
+        opp2Walk: `/sprites/opp2_walk.png${cacheBuster}`,
+        opp3Stand: `/sprites/opp3_stand.png${cacheBuster}`,
+        opp3Walk: `/sprites/opp3_walk.png${cacheBuster}`,
+        // Building sprite (replaces shelf)
+        building: `/sprites/building.png${cacheBuster}`
       }
     };
     await this.assetLoader.loadAll(assets);

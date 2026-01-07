@@ -16,7 +16,10 @@
       "Bash(# Kid 1 (brown hair boy in brown jacket)\ncp \"\"/Users/mattsm3ultra/Code/Library Survivors/assets/Default_Put_the_legs_together_so_he_looks_like_hes_standing_st_0_25842cae-d42c-4017-a894-3a680e2e806f_0.png\"\" \"\"/Users/mattsm3ultra/Code/Library Survivors/src/assets/sprites/kid1_stand.png\"\"\ncp \"\"/Users/mattsm3ultra/Code/Library Survivors/assets/Default_A_mischievous_kid_character_sprite_for_a_cozy_16bit_re_1_6f7c3a99-95e7-43d0-917f-569c7f3e7e01_0.png\"\" \"\"/Users/mattsm3ultra/Code/Library Survivors/src/assets/sprites/kid1_walk.png\"\"\n\n# Kid 2 (blonde boy) \ncp \"\"/Users/mattsm3ultra/Code/Library Survivors/assets/Default_Put_the_legs_together_so_he_looks_like_hes_standing_st_0_56a1731a-42a1-4f98-8099-49da4d0137bd_0.png\"\" \"\"/Users/mattsm3ultra/Code/Library Survivors/src/assets/sprites/kid2_stand.png\"\"\ncp \"\"/Users/mattsm3ultra/Code/Library Survivors/assets/Default_A_mischievous_blonde_kid_character_sprite_for_a_cozy_1_1_9bea206b-67a7-45cf-992d-425ab51b252d_0.png\"\" \"\"/Users/mattsm3ultra/Code/Library Survivors/src/assets/sprites/kid2_walk.png\"\"\n\n# Kid 3 (girl with brown coat and skirt)\ncp \"\"/Users/mattsm3ultra/Code/Library Survivors/assets/Default_Put_the_legs_together_so_he_looks_like_hes_standing_st_0_d0a2276f-678b-4b24-8ce3-8e80081ac038_0.png\"\" \"\"/Users/mattsm3ultra/Code/Library Survivors/src/assets/sprites/kid3_stand.png\"\"\ncp \"\"/Users/mattsm3ultra/Code/Library Survivors/assets/Default_A_mischievous_redhead_girl_character_sprite_for_a_cozy_1_56b43e25-1d33-4752-9104-902ff8ab721f_0.png\"\" \"\"/Users/mattsm3ultra/Code/Library Survivors/src/assets/sprites/kid3_walk.png\"\")",
       "Bash(ls:*)",
       "Bash(find:*)",
-      "Bash(mv:*)"
+      "Bash(mv:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npm install)",
+      "Bash(ffprobe:*)"
     ],
     "deny": []
   }

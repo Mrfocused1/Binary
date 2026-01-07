@@ -1,109 +1,91 @@
 export const UPGRADES = {
-  // Passive upgrades based on the design doc
-  speed: {
-    id: 'speed',
-    name: 'Comfy Shoes',
-    description: 'Increases movement speed by 10%',
-    icon: '👟',
-    maxLevel: 5, // Reduced max level since each level is more impactful
-    effect: (player, level) => {
-      // Use base speed to avoid compounding
-      const baseSpeed = 3; // Base movement speed
-      player.upgrade('moveSpeed', 0.1 * baseSpeed);
-    },
-    getDescription: (level) => `+${10 * level}% Movement Speed`
-  },
-  
-  pickupRadius: {
-    id: 'pickupRadius',
-    name: 'Long Arms',
-    description: 'Increases book pickup radius by 0.1m',
-    icon: '🤲',
+  // Health upgrade
+  health: {
+    id: 'health',
+    name: 'Tough Skin',
+    description: 'Increases max health by 20 and fully heals',
+    icon: '❤️',
     maxLevel: 10,
     effect: (player, level) => {
-      player.upgrade('pickupRadius', 0.1);
-      player.upgrade('returnRadius', 0.1);
+      player.maxHealth += 20;
+      player.health = player.maxHealth; // Fully heal when upgrading
     },
-    getDescription: (level) => `+${(0.1 * level).toFixed(1)}m Pickup/Return Radius`
+    getDescription: (level) => `+${20 * level} Max Health (Full Heal)`
   },
-  
-  carrySlots: {
-    id: 'carrySlots',
-    name: 'Book Belt',
-    description: 'Carry 1 additional book',
-    icon: '📚',
-    maxLevel: 7,
-    effect: (player, level) => {
-      player.upgrade('carrySlots', 1);
+
+  // Slew Dem - spawn allies (no limit!)
+  slewDem: {
+    id: 'slewDem',
+    name: 'Slew Dem',
+    description: 'Call in allies to defend you from opps',
+    icon: '👥',
+    maxLevel: Infinity, // No limit - call as many as you want!
+    isBeefOption: true, // Special option for beef situations
+    effect: (player, level, state) => {
+      // Spawn allies near player - handled by PlayingState
+      if (state && state.spawnSlewDem) {
+        state.spawnSlewDem(2 + level); // 3+ allies based on level
+      }
     },
-    getDescription: (level) => `+${level} Book Slots`
+    getDescription: (level) => `Call ${2 + level} allies to help`
   },
-  
-  stamina: {
-    id: 'stamina',
-    name: 'Fitness Training',
-    description: 'Increases maximum stamina by 10',
-    icon: '💪',
+
+  beefDampening: {
+    id: 'beefDampening',
+    name: 'Low Profile',
+    description: 'Cools down beef by 50%',
+    icon: '🕶️',
     maxLevel: 10,
-    effect: (player, level) => {
-      player.upgrade('stamina', 10);
+    effect: (player, level, state) => {
+      // Reduce current beef by 50%
+      if (state && state.game && state.game.gameData) {
+        state.game.gameData.beefLevel = state.game.gameData.beefLevel * 0.5;
+      }
     },
-    getDescription: (level) => `+${10 * level} Max Stamina`
+    getDescription: (level) => `Beef -50%`
   },
-  
-  chaosDampening: {
-    id: 'chaosDampening',
-    name: 'Zen Focus',
-    description: 'Reduces chaos gain by 2%',
-    icon: '🧘',
-    maxLevel: 10,
-    effect: (player, level) => {
-      player.upgrade('chaosDampening', 2);
-    },
-    getDescription: (level) => `-${2 * level}% Chaos Gain`
-  },
-  
-  xpGain: {
-    id: 'xpGain',
-    name: 'Reading Glasses',
-    description: 'Increases XP gain by 8%',
-    icon: '👓',
-    maxLevel: 5,
-    effect: (player, level) => {
-      player.upgrade('xpMultiplier', 0.08);
-    },
-    getDescription: (level) => `+${8 * level}% XP Gain`
-  },
-  
+
   // Future weapon skills (not implemented yet)
-  shushWave: {
-    id: 'shushWave',
-    name: 'Shush Wave',
-    description: 'Creates a cone of silence that stuns kids',
-    icon: '🤫',
+  intimidate: {
+    id: 'intimidate',
+    name: 'Intimidate',
+    description: 'Scare opps away from your stash',
+    icon: '😤',
     maxLevel: 5,
     isWeapon: true,
     effect: (player, level) => {
       // TODO: Implement weapon system
     },
-    getDescription: (level) => `Level ${level} Shush Wave`
+    getDescription: (level) => `Level ${level} Intimidate`
   }
 };
 
 // Helper function to get random upgrades
-export function getRandomUpgrades(count = 3, playerUpgrades = {}) {
+export function getRandomUpgrades(count = 3, playerUpgrades = {}, includeBeefOptions = false) {
   const availableUpgrades = Object.values(UPGRADES).filter(upgrade => {
-    // Filter out weapons and removed upgrades
-    if (upgrade.isWeapon || upgrade.id === 'health') return false;
-    
+    // Filter out weapons
+    if (upgrade.isWeapon) return false;
+    // Filter out beef-only options unless requested
+    if (upgrade.isBeefOption && !includeBeefOptions) return false;
+
     // Check if upgrade is maxed out
     const currentLevel = playerUpgrades[upgrade.id] || 0;
     return currentLevel < upgrade.maxLevel;
   });
-  
+
   // Shuffle and pick
   const shuffled = [...availableUpgrades].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, Math.min(count, shuffled.length));
+}
+
+// Get upgrades for beef situation (always includes Slew Dem)
+export function getBeefUpgrades(count = 3, playerUpgrades = {}) {
+  const upgrades = getRandomUpgrades(count - 1, playerUpgrades, false);
+
+  // Always add Slew Dem (no limit!)
+  upgrades.unshift(UPGRADES.slewDem); // Put Slew Dem first
+
+  return upgrades.slice(0, count);
 }
 
 // Get upgrade by ID

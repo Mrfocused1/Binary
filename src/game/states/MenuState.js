@@ -10,15 +10,27 @@ export class MenuState extends State {
     ];
     this.selectedIndex = 0;
     this.showingInstructions = false;
-    
+
     // Video background
     this.video = null;
+    this.video2 = null;
     this.videoLoaded = false;
-    
+    this.video2Loaded = false;
+    this.currentVideo = 1; // 1 or 2
+
+    // Fade state: 'none', 'fade-out', 'black', 'fade-in'
+    this.fadeState = 'none';
+    this.fadeAlpha = 0; // 0 = fully visible, 1 = fully black
+    this.fadeDuration = 1000; // 1 second fade
+    this.fadeTimer = 0;
+    this.blackDuration = 300; // 0.3 seconds of black
+
     // Background music
     this.bgMusic = null;
     this.musicLoaded = false;
-    
+    this.musicStarted = false; // Track if music has been started by user interaction
+    this.clickListenerAdded = false; // Track if click listener was added
+
     // Menu selection sound
     this.selectSound = null;
   }
@@ -26,38 +38,96 @@ export class MenuState extends State {
   enter() {
     this.selectedIndex = 0;
     this.showingInstructions = false;
-    
-    // Create and setup video if not already created
+
+    // Create and setup video 1 if not already created
     if (!this.video) {
       this.video = document.createElement('video');
-      this.video.src = '/menu_background.mp4';
-      this.video.loop = true;
+      this.video.src = '/intro%20video.mp4';
+      this.video.loop = false; // No loop - we handle sequencing manually
       this.video.muted = true;
       this.video.autoplay = true;
-      
+      this.video.preload = 'auto'; // Ensure full buffering
+
       // Handle various video events for better reliability
-      this.video.addEventListener('canplay', () => {
+      this.video.addEventListener('canplaythrough', () => {
         this.videoLoaded = true;
-        this.video.play().catch(e => console.log('Video play failed:', e));
+        if (this.currentVideo === 1 && this.fadeState === 'none') {
+          this.video.play().catch(e => console.log('Video play failed:', e));
+        }
       });
-      
+
       // Also try playing on loadedmetadata
       this.video.addEventListener('loadedmetadata', () => {
-        this.video.play().catch(e => console.log('Video play on metadata failed:', e));
+        if (this.currentVideo === 1 && this.fadeState === 'none') {
+          this.video.play().catch(e => console.log('Video play on metadata failed:', e));
+        }
       });
-      
+
+      // When video 1 ends, play video 2
+      this.video.addEventListener('ended', () => {
+        this.video2.currentTime = 0;
+        this.video2Loaded = true; // Force ready state
+        // Start video 2 but don't switch display until it's actually playing
+        this.video2.play().then(() => {
+          this.currentVideo = 2;
+        }).catch(e => {
+          console.log('Video 2 play failed:', e);
+          this.currentVideo = 2; // Switch anyway as fallback
+        });
+      });
+
       // Handle errors
       this.video.addEventListener('error', (e) => {
         console.error('Video loading error:', e);
         this.videoLoaded = false;
       });
-      
+
       // Force load the video
       this.video.load();
     } else {
       // Resume playing if returning to menu
-      this.videoLoaded = true; // Assume it's loaded if we already created it
+      this.videoLoaded = true;
+      this.currentVideo = 1;
+      this.fadeState = 'none';
+      this.fadeAlpha = 0;
+      this.video.currentTime = 0;
       this.video.play().catch(e => console.log('Video play failed:', e));
+    }
+
+    // Create and setup video 2 if not already created
+    if (!this.video2) {
+      this.video2 = document.createElement('video');
+      this.video2.src = '/intro%20video%202.mp4';
+      this.video2.loop = false;
+      this.video2.muted = true;
+      this.video2.preload = 'auto'; // Ensure full buffering
+
+      // Mark as loaded when ready - use multiple events for reliability
+      const markVideo2Ready = () => {
+        if (!this.video2Loaded) {
+          this.video2Loaded = true;
+          this.video2.currentTime = 0;
+        }
+      };
+      this.video2.addEventListener('canplay', markVideo2Ready);
+      this.video2.addEventListener('canplaythrough', markVideo2Ready);
+      this.video2.addEventListener('loadeddata', markVideo2Ready);
+
+      // When video 2 ends, start fade to black then loop back to video 1
+      this.video2.addEventListener('ended', () => {
+        this.fadeState = 'fade-out';
+        this.fadeTimer = 0;
+      });
+
+      this.video2.addEventListener('error', (e) => {
+        console.error('Video 2 loading error:', e);
+        this.video2Loaded = false;
+      });
+
+      this.video2.load();
+    } else {
+      // Ensure video 2 is ready for next transition
+      this.video2.currentTime = 0;
     }
     
     // Create and setup background music if not already created
@@ -65,17 +135,16 @@ export class MenuState extends State {
       this.bgMusic = new Audio('/intro_music.mp3');
       this.bgMusic.loop = true;
       this.bgMusic.volume = 0.5; // Set to 50% volume
-      
-      // Start playing when loaded
+
+      // Mark as loaded when ready (don't auto-play due to browser restrictions)
       this.bgMusic.addEventListener('loadeddata', () => {
         this.musicLoaded = true;
-        this.bgMusic.play().catch(e => console.log('Music play failed:', e));
       });
-      
+
       // Load the music
       this.bgMusic.load();
-    } else {
-      // Resume playing if returning to menu
+    } else if (this.musicStarted) {
+      // Resume playing if returning to menu and music was already started
       this.bgMusic.play().catch(e => console.log('Music play failed:', e));
     }
     
@@ -84,14 +153,33 @@ export class MenuState extends State {
       this.selectSound = new Audio('/menu_select.mp3');
       this.selectSound.volume = 0.7; // Slightly louder than music
     }
+
+    // Add one-time listener to start music on ANY interaction (browser autoplay policy workaround)
+    if (!this.clickListenerAdded) {
+      this.clickListenerAdded = true;
+      const startMusicOnInteraction = () => {
+        this.tryStartMusic();
+        // Remove all listeners after first interaction
+        document.removeEventListener('click', startMusicOnInteraction);
+        document.removeEventListener('keydown', startMusicOnInteraction);
+        document.removeEventListener('mousedown', startMusicOnInteraction);
+      };
+      // Listen on document level to catch ANY interaction
+      document.addEventListener('click', startMusicOnInteraction);
+      document.addEventListener('keydown', startMusicOnInteraction);
+      document.addEventListener('mousedown', startMusicOnInteraction);
+    }
   }
   
   exit() {
-    // Pause video when leaving menu
+    // Pause videos when leaving menu
     if (this.video) {
       this.video.pause();
     }
-    
+    if (this.video2) {
+      this.video2.pause();
+    }
+
     // Pause music when leaving menu
     if (this.bgMusic) {
       this.bgMusic.pause();
@@ -100,8 +188,48 @@ export class MenuState extends State {
   
   update(deltaTime) {
     const input = this.game.inputManager;
-    
-    
+
+    // Try to start music on any user interaction (key press or mouse click)
+    if (!this.musicStarted) {
+      if (input.isKeyPressed('ArrowUp') || input.isKeyPressed('ArrowDown') ||
+          input.isKeyPressed('w') || input.isKeyPressed('s') ||
+          input.isKeyPressed('Enter') || input.isKeyPressed(' ') ||
+          input.isKeyPressed('Escape') ||
+          input.isMouseButtonPressed(0)) {
+        this.tryStartMusic();
+      }
+    }
+
+    // Handle fade transitions
+    if (this.fadeState !== 'none') {
+      this.fadeTimer += deltaTime * 1000; // Convert to milliseconds
+
+      if (this.fadeState === 'fade-out') {
+        // Fading to black
+        this.fadeAlpha = Math.min(1, this.fadeTimer / this.fadeDuration);
+        if (this.fadeAlpha >= 1) {
+          this.fadeState = 'black';
+          this.fadeTimer = 0;
+        }
+      } else if (this.fadeState === 'black') {
+        // Hold on black, then switch to video 1 and fade in
+        if (this.fadeTimer >= this.blackDuration) {
+          this.fadeState = 'fade-in';
+          this.fadeTimer = 0;
+          this.currentVideo = 1;
+          this.video.currentTime = 0;
+          this.video.play().catch(e => console.log('Video 1 restart failed:', e));
+        }
+      } else if (this.fadeState === 'fade-in') {
+        // Fading from black to video 1
+        this.fadeAlpha = Math.max(0, 1 - (this.fadeTimer / this.fadeDuration));
+        if (this.fadeAlpha <= 0) {
+          this.fadeState = 'none';
+          this.fadeAlpha = 0;
+        }
+      }
+    }
+
     if (this.showingInstructions) {
       if (input.isKeyPressed('Escape') || input.isKeyPressed('Enter')) {
         this.showingInstructions = false;
@@ -160,15 +288,21 @@ export class MenuState extends State {
     const ctx = renderer.ctx;
     const { width, height } = this.game;
     
-    // Draw video background if loaded
-    if (this.video && this.videoLoaded && !this.video.paused) {
+    // Determine which video to draw
+    const activeVideo = this.currentVideo === 1 ? this.video : this.video2;
+    const isVideoReady = this.currentVideo === 1
+      ? (this.video && this.videoLoaded)
+      : (this.video2 && this.video2Loaded);
+
+    // Draw video background if loaded (draw even if briefly paused during transition)
+    if (isVideoReady && activeVideo && activeVideo.readyState >= 2) {
       try {
         // Scale video to cover the entire canvas
-        const videoAspect = this.video.videoWidth / this.video.videoHeight;
+        const videoAspect = activeVideo.videoWidth / activeVideo.videoHeight;
         const canvasAspect = width / height;
-        
+
         let drawWidth, drawHeight, drawX, drawY;
-        
+
         if (videoAspect > canvasAspect) {
           // Video is wider - fit height, crop width
           drawHeight = height;
@@ -182,8 +316,8 @@ export class MenuState extends State {
           drawX = 0;
           drawY = (height - drawHeight) / 2;
         }
-        
-        ctx.drawImage(this.video, drawX, drawY, drawWidth, drawHeight);
+
+        ctx.drawImage(activeVideo, drawX, drawY, drawWidth, drawHeight);
       } catch (e) {
         // Fallback to solid color if video fails
         ctx.fillStyle = '#f5e6d3';
@@ -194,15 +328,21 @@ export class MenuState extends State {
       ctx.fillStyle = '#f5e6d3';
       ctx.fillRect(0, 0, width, height);
     }
+
+    // Draw fade overlay
+    if (this.fadeAlpha > 0) {
+      ctx.fillStyle = `rgba(0, 0, 0, ${this.fadeAlpha})`;
+      ctx.fillRect(0, 0, width, height);
+    }
     
     
     if (this.showingInstructions) {
       this.renderInstructions(ctx);
       return;
     }
-    
+
     ctx.save();
-    
+
     // Menu items - positioned in bottom third
     ctx.font = '36px Arial';
     ctx.textAlign = 'center';
@@ -285,18 +425,18 @@ export class MenuState extends State {
     
     ctx.font = '20px Arial'; // Reduced from 24px
     const instructions = [
-      'Survive 30 minutes of library chaos!',
+      'Survive 30 minutes on the streets!',
       '',
       'CONTROLS:',
       'WASD/Arrow Keys - Move',
-      'Shift - Sprint (uses stamina)',
+      'Shift - Shoot',
       'P/Escape - Pause',
       '',
       'GAMEPLAY:',
-      '• Pick up books automatically when near them',
-      '• Return books to matching colored shelves',
-      '• Kids will steal books - chase them away!',
-      '• Keep Chaos below 100% or you lose',
+      '• Steal loot from traphouses',
+      '• Stash your loot at your safe house',
+      '• Opps will protect traphouses and raid your stash!',
+      '• Keep Beef below 100% or you lose',
       '• Level up to choose upgrades',
       '',
       'Press Enter or Escape to return'
@@ -329,6 +469,15 @@ export class MenuState extends State {
       // Reset the sound to play from beginning
       this.selectSound.currentTime = 0;
       this.selectSound.play().catch(e => console.log('Select sound play failed:', e));
+    }
+  }
+
+  // Start music on first user interaction (required by browser autoplay policy)
+  tryStartMusic() {
+    if (!this.musicStarted && this.bgMusic) {
+      this.bgMusic.play().then(() => {
+        this.musicStarted = true;
+      }).catch(e => console.log('Music play failed:', e));
     }
   }
 }

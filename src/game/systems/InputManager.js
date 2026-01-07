@@ -28,7 +28,7 @@ export class InputManager {
       ['moveDown', ['s', 'S', 'ArrowDown']],
       ['moveLeft', ['a', 'A', 'ArrowLeft']],
       ['moveRight', ['d', 'D', 'ArrowRight']],
-      ['sprint', ['Shift']],
+      ['shoot', ['Shift']],
       ['pause', ['p', 'P', 'Escape']],
       ['interact', [' ', 'e', 'E']]
     ]);

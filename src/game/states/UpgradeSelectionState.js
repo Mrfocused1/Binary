@@ -1,5 +1,5 @@
 import { State } from './State.js';
-import { getRandomUpgrades } from '../data/upgrades.js';
+import { getRandomUpgrades, getBeefUpgrades } from '../data/upgrades.js';
 
 export class UpgradeSelectionState extends State {
   constructor(game) {
@@ -9,17 +9,25 @@ export class UpgradeSelectionState extends State {
     this.selectedIndex = 0;
     this.animationTimer = 0;
     this.selectSound = null;
+    this.isBeefSituation = false;
   }
   
-  enter() {
-    console.log('Entering upgrade selection state');
-    
+  enter(data = {}) {
+    console.log('Entering upgrade selection state', data);
+
+    // Check if this is a beef situation
+    this.isBeefSituation = data.isBeefSituation || false;
+
     // Get player's current upgrades
     const player = this.game.stateManager.getState('playing')?.player;
     const playerUpgrades = player?.upgradeLevels || {};
-    
-    // Get 3 random upgrades
-    this.upgrades = getRandomUpgrades(3, playerUpgrades);
+
+    // Get upgrades - beef situation includes Slew Dem option
+    if (this.isBeefSituation) {
+      this.upgrades = getBeefUpgrades(3, playerUpgrades);
+    } else {
+      this.upgrades = getRandomUpgrades(3, playerUpgrades);
+    }
     
     // If no upgrades available, skip
     if (this.upgrades.length === 0) {
@@ -31,10 +39,14 @@ export class UpgradeSelectionState extends State {
     this.game.gameData.isPaused = true;
     this.selectedIndex = 0;
     this.animationTimer = 0;
-    
-    // Clear any lingering input state
-    this.game.inputManager.update();
-    
+
+    // Reset keyboard tracking state
+    this.keyDebounce = 0.3; // Initial debounce to prevent accidental selection
+    this.lastKeyState = {};
+
+    // Ensure canvas has keyboard focus for arrow key navigation
+    this.game.inputManager.ensureFocus();
+
     // Initialize select sound if not already created
     if (!this.selectSound) {
       this.selectSound = new Audio('/menu_select.mp3');
@@ -56,35 +68,63 @@ export class UpgradeSelectionState extends State {
   
   update(deltaTime) {
     const input = this.game.inputManager;
-    
+
     // Update animation
     this.animationTimer += deltaTime;
-    
-    // Simple input handling - use isKeyPressed for single press detection
-    if (input.isKeyPressed('ArrowLeft') || input.isKeyPressed('a')) {
+
+    // Initialize key tracking if not set
+    if (this.keyDebounce === undefined) {
+      this.keyDebounce = 0;
+      this.lastKeyState = {};
+    }
+
+    // Decrease debounce timer
+    if (this.keyDebounce > 0) {
+      this.keyDebounce -= deltaTime;
+    }
+
+    // Track key states for manual press detection
+    const leftDown = input.isKeyDown('ArrowLeft') || input.isKeyDown('a');
+    const rightDown = input.isKeyDown('ArrowRight') || input.isKeyDown('d');
+    const confirmDown = input.isKeyDown('Enter') || input.isKeyDown(' ');
+
+    // Left arrow - check for new press (wasn't down last frame)
+    if (leftDown && !this.lastKeyState.left && this.keyDebounce <= 0) {
       console.log('Left arrow pressed, changing selection');
       this.selectedIndex = Math.max(0, this.selectedIndex - 1);
       this.playSelectSound();
+      this.keyDebounce = 0.2; // 200ms debounce
     }
-    
-    if (input.isKeyPressed('ArrowRight') || input.isKeyPressed('d')) {
+
+    // Right arrow - check for new press
+    if (rightDown && !this.lastKeyState.right && this.keyDebounce <= 0) {
       console.log('Right arrow pressed, changing selection');
       this.selectedIndex = Math.min(this.upgrades.length - 1, this.selectedIndex + 1);
       this.playSelectSound();
+      this.keyDebounce = 0.2;
     }
-    
-    if (input.isKeyPressed('Enter') || input.isKeyPressed(' ')) {
+
+    // Enter/Space - check for new press
+    if (confirmDown && !this.lastKeyState.confirm && this.keyDebounce <= 0) {
       console.log('Enter/Space pressed, selecting upgrade');
       this.selectUpgrade();
+      return; // Exit after selection
     }
-    
+
+    // Update last key states
+    this.lastKeyState.left = leftDown;
+    this.lastKeyState.right = rightDown;
+    this.lastKeyState.confirm = confirmDown;
+
     // Number key shortcuts (1, 2, 3)
     for (let i = 0; i < this.upgrades.length; i++) {
-      if (input.isKeyPressed((i + 1).toString())) {
+      const numKeyDown = input.isKeyDown((i + 1).toString());
+      if (numKeyDown && !this.lastKeyState[`num${i}`] && this.keyDebounce <= 0) {
         this.selectedIndex = i;
         this.selectUpgrade();
-        break;
+        return;
       }
+      this.lastKeyState[`num${i}`] = numKeyDown;
     }
     
     // Mouse support
@@ -120,15 +160,23 @@ export class UpgradeSelectionState extends State {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
     ctx.fillRect(0, 0, width, height);
     
-    // Title
+    // Title - different for beef situations vs level up
     ctx.save();
-    ctx.fillStyle = '#fff';
     ctx.font = 'bold 36px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('LEVEL UP!', width / 2, 100);
-    
-    ctx.font = '20px Arial';
-    ctx.fillText('Choose an upgrade:', width / 2, 140);
+
+    if (this.isBeefSituation) {
+      ctx.fillStyle = '#ff4444';
+      ctx.fillText('BEEF IS HIGH!', width / 2, 100);
+      ctx.font = '20px Arial';
+      ctx.fillStyle = '#ffaaaa';
+      ctx.fillText('Choose how to handle the situation:', width / 2, 140);
+    } else {
+      ctx.fillStyle = '#fff';
+      ctx.fillText('LEVEL UP!', width / 2, 100);
+      ctx.font = '20px Arial';
+      ctx.fillText('Choose an upgrade:', width / 2, 140);
+    }
     
     // Render upgrade cards
     const cardWidth = 200;
@@ -210,22 +258,22 @@ export class UpgradeSelectionState extends State {
   
   selectUpgrade() {
     if (this.selectedIndex < 0 || this.selectedIndex >= this.upgrades.length) return;
-    
+
     const upgrade = this.upgrades[this.selectedIndex];
     const playingState = this.game.stateManager.getState('playing');
     const player = playingState?.player;
-    
+
     if (player) {
       // Initialize upgrade levels if needed
       if (!player.upgradeLevels) {
         player.upgradeLevels = {};
       }
-      
-      // Apply upgrade
+
+      // Apply upgrade - pass playingState for upgrades that need it (like Slew Dem)
       const currentLevel = player.upgradeLevels[upgrade.id] || 0;
       player.upgradeLevels[upgrade.id] = currentLevel + 1;
-      upgrade.effect(player, currentLevel + 1);
-      
+      upgrade.effect(player, currentLevel + 1, playingState);
+
       // Visual feedback
       playingState.particles.push({
         type: 'levelup',
@@ -235,7 +283,7 @@ export class UpgradeSelectionState extends State {
         age: 0
       });
     }
-    
+
     // Return to game
     this.game.stateManager.popState();
   }
