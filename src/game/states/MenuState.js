@@ -46,6 +46,9 @@ export class MenuState extends State {
       this.video.loop = false; // No loop - we handle sequencing manually
       this.video.muted = true;
       this.video.autoplay = true;
+      this.video.playsInline = true; // Required for iOS autoplay
+      this.video.setAttribute('playsinline', ''); // Also set as attribute for compatibility
+      this.video.setAttribute('webkit-playsinline', ''); // Older iOS
       this.video.preload = 'auto'; // Ensure full buffering
 
       // Handle various video events for better reliability
@@ -100,6 +103,9 @@ export class MenuState extends State {
       this.video2.src = '/intro%20video%202.mp4';
       this.video2.loop = false;
       this.video2.muted = true;
+      this.video2.playsInline = true; // Required for iOS autoplay
+      this.video2.setAttribute('playsinline', '');
+      this.video2.setAttribute('webkit-playsinline', '');
       this.video2.preload = 'auto'; // Ensure full buffering
 
       // Mark as loaded when ready - use multiple events for reliability
@@ -154,22 +160,23 @@ export class MenuState extends State {
       this.selectSound.volume = 0.7; // Slightly louder than music
     }
 
-    // Add one-time listener to start music on ANY interaction (browser autoplay policy workaround)
+    // Add one-time listener to start music AND video on ANY interaction (browser autoplay policy workaround)
     if (!this.clickListenerAdded) {
       this.clickListenerAdded = true;
-      const startMusicOnInteraction = () => {
+      const startMediaOnInteraction = () => {
         this.tryStartMusic();
+        this.tryStartVideo();
         // Remove all listeners after first interaction
-        document.removeEventListener('click', startMusicOnInteraction);
-        document.removeEventListener('keydown', startMusicOnInteraction);
-        document.removeEventListener('mousedown', startMusicOnInteraction);
-        document.removeEventListener('touchstart', startMusicOnInteraction);
+        document.removeEventListener('click', startMediaOnInteraction);
+        document.removeEventListener('keydown', startMediaOnInteraction);
+        document.removeEventListener('mousedown', startMediaOnInteraction);
+        document.removeEventListener('touchstart', startMediaOnInteraction);
       };
       // Listen on document level to catch ANY interaction (including touch)
-      document.addEventListener('click', startMusicOnInteraction);
-      document.addEventListener('keydown', startMusicOnInteraction);
-      document.addEventListener('mousedown', startMusicOnInteraction);
-      document.addEventListener('touchstart', startMusicOnInteraction);
+      document.addEventListener('click', startMediaOnInteraction);
+      document.addEventListener('keydown', startMediaOnInteraction);
+      document.addEventListener('mousedown', startMediaOnInteraction);
+      document.addEventListener('touchstart', startMediaOnInteraction);
     }
   }
   
@@ -483,6 +490,13 @@ export class MenuState extends State {
       this.bgMusic.play().then(() => {
         this.musicStarted = true;
       }).catch(e => console.log('Music play failed:', e));
+    }
+  }
+
+  // Start video on first user interaction (required by mobile browsers)
+  tryStartVideo() {
+    if (this.video && this.videoLoaded) {
+      this.video.play().catch(e => console.log('Video play on interaction failed:', e));
     }
   }
 }
