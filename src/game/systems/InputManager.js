@@ -21,7 +21,32 @@ export class InputManager {
     
     // Touch state (for mobile support)
     this.touches = new Map();
-    
+    this.isMobile = this.detectMobile();
+
+    // Virtual joystick state
+    this.virtualJoystick = {
+      active: false,
+      touchId: null,
+      centerX: 0,
+      centerY: 0,
+      currentX: 0,
+      currentY: 0,
+      radius: 60 // Max distance from center
+    };
+
+    // Virtual buttons
+    this.virtualButtons = {
+      shoot: { active: false, touchId: null, x: 0, y: 0, radius: 50 },
+      pause: { active: false, touchId: null, x: 0, y: 0, radius: 30 }
+    };
+
+    // Touch zones (will be set based on canvas size)
+    this.touchZones = {
+      joystick: { x: 0, y: 0, width: 0, height: 0 },
+      shoot: { x: 0, y: 0, radius: 50 },
+      pause: { x: 0, y: 0, radius: 30 }
+    };
+
     // Input mappings
     this.actionMappings = new Map([
       ['moveUp', ['w', 'W', 'ArrowUp']],
@@ -137,31 +162,116 @@ export class InputManager {
   handleTouchStart(event) {
     event.preventDefault();
     for (const touch of event.changedTouches) {
+      const pos = this.getTouchCanvasPosition(touch);
+
       this.touches.set(touch.identifier, {
-        x: touch.clientX,
-        y: touch.clientY,
-        startX: touch.clientX,
-        startY: touch.clientY
+        x: pos.x,
+        y: pos.y,
+        startX: pos.x,
+        startY: pos.y,
+        clientX: touch.clientX,
+        clientY: touch.clientY
       });
+
+      // Check if touch is in joystick zone (left half of screen)
+      if (pos.x < this.canvas.width / 2 && !this.virtualJoystick.active) {
+        this.virtualJoystick.active = true;
+        this.virtualJoystick.touchId = touch.identifier;
+        this.virtualJoystick.centerX = pos.x;
+        this.virtualJoystick.centerY = pos.y;
+        this.virtualJoystick.currentX = pos.x;
+        this.virtualJoystick.currentY = pos.y;
+      }
+      // Check if touch is in shoot button zone (right side, lower)
+      else if (pos.x > this.canvas.width * 0.7 && pos.y > this.canvas.height * 0.5) {
+        this.virtualButtons.shoot.active = true;
+        this.virtualButtons.shoot.touchId = touch.identifier;
+        this.virtualButtons.shoot.x = pos.x;
+        this.virtualButtons.shoot.y = pos.y;
+      }
+      // Check if touch is in pause zone (top right)
+      else if (pos.x > this.canvas.width * 0.85 && pos.y < this.canvas.height * 0.15) {
+        this.virtualButtons.pause.active = true;
+        this.virtualButtons.pause.touchId = touch.identifier;
+      }
+    }
+
+    // Simulate mouse position for menu compatibility
+    if (event.touches.length > 0) {
+      const pos = this.getTouchCanvasPosition(event.touches[0]);
+      this.mouse.x = pos.x;
+      this.mouse.y = pos.y;
     }
   }
-  
+
   handleTouchEnd(event) {
     event.preventDefault();
     for (const touch of event.changedTouches) {
+      // Release joystick if this was the joystick touch
+      if (this.virtualJoystick.touchId === touch.identifier) {
+        this.virtualJoystick.active = false;
+        this.virtualJoystick.touchId = null;
+      }
+
+      // Release shoot button
+      if (this.virtualButtons.shoot.touchId === touch.identifier) {
+        this.virtualButtons.shoot.active = false;
+        this.virtualButtons.shoot.touchId = null;
+      }
+
+      // Release pause button
+      if (this.virtualButtons.pause.touchId === touch.identifier) {
+        this.virtualButtons.pause.active = false;
+        this.virtualButtons.pause.touchId = null;
+      }
+
       this.touches.delete(touch.identifier);
     }
+
+    // Simulate mouse click for menu compatibility
+    if (event.changedTouches.length > 0) {
+      this.mouse.buttons.set(0, true);
+      setTimeout(() => this.mouse.buttons.delete(0), 100);
+    }
   }
-  
+
   handleTouchMove(event) {
     event.preventDefault();
     for (const touch of event.changedTouches) {
       if (this.touches.has(touch.identifier)) {
+        const pos = this.getTouchCanvasPosition(touch);
         const touchData = this.touches.get(touch.identifier);
-        touchData.x = touch.clientX;
-        touchData.y = touch.clientY;
+        touchData.x = pos.x;
+        touchData.y = pos.y;
+        touchData.clientX = touch.clientX;
+        touchData.clientY = touch.clientY;
+
+        // Update joystick position
+        if (this.virtualJoystick.touchId === touch.identifier) {
+          this.virtualJoystick.currentX = pos.x;
+          this.virtualJoystick.currentY = pos.y;
+        }
       }
     }
+
+    // Update mouse position for menu compatibility
+    if (event.touches.length > 0) {
+      const pos = this.getTouchCanvasPosition(event.touches[0]);
+      this.mouse.x = pos.x;
+      this.mouse.y = pos.y;
+    }
+  }
+
+  // Convert touch client coordinates to canvas coordinates
+  getTouchCanvasPosition(touch) {
+    const rect = this.canvas.getBoundingClientRect();
+    const scaleX = this.canvas.width / rect.width;
+    const scaleY = this.canvas.height / rect.height;
+
+    return {
+      x: (touch.clientX - rect.left) * scaleX,
+      y: (touch.clientY - rect.top) * scaleY
+    };
   }
   
   updateMousePosition(event) {
@@ -284,5 +394,114 @@ export class InputManager {
       console.log('Refocusing canvas');
       this.canvas.focus();
     }
+  }
+
+  // Detect if running on mobile device
+  detectMobile() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+           ('ontouchstart' in window) ||
+           (navigator.maxTouchPoints > 0);
+  }
+
+  // Get virtual joystick movement vector (returns {x, y} normalized)
+  getVirtualJoystickVector() {
+    if (!this.virtualJoystick.active) {
+      return { x: 0, y: 0 };
+    }
+
+    const dx = this.virtualJoystick.currentX - this.virtualJoystick.centerX;
+    const dy = this.virtualJoystick.currentY - this.virtualJoystick.centerY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance < 10) { // Dead zone
+      return { x: 0, y: 0 };
+    }
+
+    // Normalize and clamp
+    const maxDistance = this.virtualJoystick.radius;
+    const clampedDistance = Math.min(distance, maxDistance);
+    const normalizedDistance = clampedDistance / maxDistance;
+
+    return {
+      x: (dx / distance) * normalizedDistance,
+      y: (dy / distance) * normalizedDistance
+    };
+  }
+
+  // Check if shoot button is pressed
+  isShootButtonPressed() {
+    return this.virtualButtons.shoot.active;
+  }
+
+  // Check if pause button was pressed
+  isPauseButtonPressed() {
+    return this.virtualButtons.pause.active;
+  }
+
+  // Get combined movement vector (keyboard + touch)
+  getMovementVector() {
+    let x = 0;
+    let y = 0;
+
+    // Keyboard input
+    if (this.isActionDown('moveLeft')) x -= 1;
+    if (this.isActionDown('moveRight')) x += 1;
+    if (this.isActionDown('moveUp')) y -= 1;
+    if (this.isActionDown('moveDown')) y += 1;
+
+    // Touch input (virtual joystick)
+    const joystick = this.getVirtualJoystickVector();
+    if (joystick.x !== 0 || joystick.y !== 0) {
+      x = joystick.x;
+      y = joystick.y;
+    }
+
+    // Normalize diagonal movement (only for keyboard, joystick is already normalized)
+    if (x !== 0 && y !== 0 && !this.virtualJoystick.active) {
+      const length = Math.sqrt(x * x + y * y);
+      x /= length;
+      y /= length;
+    }
+
+    return { x, y };
+  }
+
+  // Check if shooting (keyboard Shift OR touch button)
+  isShootingActive() {
+    return this.isActionDown('shoot') || this.isShootButtonPressed();
+  }
+
+  // Get touch for UI interactions (first active touch)
+  getTouch() {
+    if (this.touches.size > 0) {
+      const firstTouch = this.touches.values().next().value;
+      return { x: firstTouch.x, y: firstTouch.y };
+    }
+    return null;
+  }
+
+  // Check if there's an active touch
+  hasActiveTouch() {
+    return this.touches.size > 0;
+  }
+
+  // Get joystick state for rendering
+  getJoystickState() {
+    return {
+      active: this.virtualJoystick.active,
+      centerX: this.virtualJoystick.centerX,
+      centerY: this.virtualJoystick.centerY,
+      currentX: this.virtualJoystick.currentX,
+      currentY: this.virtualJoystick.currentY,
+      radius: this.virtualJoystick.radius
+    };
+  }
+
+  // Get button states for rendering
+  getButtonStates() {
+    return {
+      shoot: this.virtualButtons.shoot.active,
+      pause: this.virtualButtons.pause.active
+    };
   }
 }

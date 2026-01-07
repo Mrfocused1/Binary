@@ -5,6 +5,7 @@ import { Traphouse } from '../entities/Traphouse.js';
 import { SafeHouse } from '../entities/SafeHouse.js';
 import { Opp } from '../entities/Opp.js';
 import { Projectile } from '../entities/Projectile.js';
+import { MobileControls } from '../systems/MobileControls.js';
 
 export class PlayingState extends State {
   constructor(game) {
@@ -141,6 +142,9 @@ export class PlayingState extends State {
 
     // Opp Block guard respawn queue (they multiply after death)
     this.oppBlockRespawnQueue = [];
+
+    // Mobile controls overlay
+    this.mobileControls = new MobileControls(this.game.inputManager, this.game.canvas);
 
     // Ensure opp spawning is reset to initial values
     this.maxOpps = 10; // Start with capacity for 10 opps
@@ -566,6 +570,11 @@ export class PlayingState extends State {
     if (gameData.beefLevel > 80) {
       const intensity = (gameData.beefLevel - 80) / 20;
       this.renderHeatVignette(ctx, intensity);
+    }
+
+    // Render mobile controls overlay (only on touch devices)
+    if (this.mobileControls) {
+      this.mobileControls.render(ctx, width, height);
     }
   }
   

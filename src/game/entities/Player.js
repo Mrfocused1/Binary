@@ -73,8 +73,8 @@ export class Player extends Entity {
       this.shootTimer -= deltaTime;
     }
 
-    // Handle shooting (Shift key)
-    if (input.isActionPressed('shoot') && this.shootTimer <= 0) {
+    // Handle shooting (Shift key or touch shoot button)
+    if (input.isShootingActive() && this.shootTimer <= 0) {
       this.shoot();
     }
 

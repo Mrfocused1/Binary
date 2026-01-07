@@ -163,11 +163,13 @@ export class MenuState extends State {
         document.removeEventListener('click', startMusicOnInteraction);
         document.removeEventListener('keydown', startMusicOnInteraction);
         document.removeEventListener('mousedown', startMusicOnInteraction);
+        document.removeEventListener('touchstart', startMusicOnInteraction);
       };
-      // Listen on document level to catch ANY interaction
+      // Listen on document level to catch ANY interaction (including touch)
       document.addEventListener('click', startMusicOnInteraction);
       document.addEventListener('keydown', startMusicOnInteraction);
       document.addEventListener('mousedown', startMusicOnInteraction);
+      document.addEventListener('touchstart', startMusicOnInteraction);
     }
   }
   
@@ -231,7 +233,9 @@ export class MenuState extends State {
     }
 
     if (this.showingInstructions) {
-      if (input.isKeyPressed('Escape') || input.isKeyPressed('Enter')) {
+      // Dismiss instructions with keyboard, mouse click, or touch
+      if (input.isKeyPressed('Escape') || input.isKeyPressed('Enter') ||
+          input.isMouseButtonPressed(0)) {
         this.showingInstructions = false;
       }
       return;
@@ -428,8 +432,8 @@ export class MenuState extends State {
       'Survive 30 minutes on the streets!',
       '',
       'CONTROLS:',
-      'WASD/Arrow Keys - Move',
-      'Shift - Shoot',
+      'WASD/Arrow Keys - Move (or virtual joystick on mobile)',
+      'Shift - Shoot (or tap shoot button on mobile)',
       'P/Escape - Pause',
       '',
       'GAMEPLAY:',
@@ -439,7 +443,7 @@ export class MenuState extends State {
       '• Keep Beef below 100% or you lose',
       '• Level up to choose upgrades',
       '',
-      'Press Enter or Escape to return'
+      'Tap anywhere or press Enter to return'
     ];
     
     const lineHeight = 28; // Spacing between lines
