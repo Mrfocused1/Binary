@@ -186,6 +186,13 @@ export class Opp extends Entity {
         return;
       }
 
+      // When beef is high (60%+), guards leave their post to attack!
+      const gameData = this.game.gameData;
+      if (gameData && gameData.beefLevel >= 60 && player) {
+        this.state = 'chasing';
+        return;
+      }
+
       // Guards patrol near their assigned position, not the safe house
       // Check for player near the Opp Block - guards are aggressive
       if (player) {
@@ -998,30 +1005,53 @@ export class Opp extends Entity {
   }
 
   updateShooting(deltaTime) {
-    // Don't shoot while knocked back or fleeing
-    if (this.isKnockedBack || this.state === 'fleeing') return;
+    // Don't shoot while knocked back or fleeing (allies always can shoot)
+    if (this.isKnockedBack || (!this.isAlly && this.state === 'fleeing')) return;
 
     // Update shoot timer
     this.shootTimer -= deltaTime;
     if (this.shootTimer > 0) return;
 
-    // Check if player is in range
     const state = this.game.stateManager.currentState;
-    const player = state ? state.player : null;
-    if (!player || player.isDead) return;
+    if (!state) return;
 
-    const distToPlayer = this.getDistanceTo(player);
-    if (distToPlayer > this.shootRange) return;
+    // Find the nearest target to shoot at
+    let nearestTarget = null;
+    let nearestDist = this.shootRange;
 
-    // Shoot at player
-    this.shoot(player);
-    this.shootTimer = this.shootCooldown;
+    // Check player
+    const player = state.player;
+    if (player && !player.isDead) {
+      const distToPlayer = this.getDistanceTo(player);
+      if (distToPlayer < nearestDist) {
+        nearestDist = distToPlayer;
+        nearestTarget = player;
+      }
+    }
+
+    // Also check allies (Slew Dem) as targets!
+    if (state.allies) {
+      for (const ally of state.allies) {
+        if (ally.isDead || ally === this) continue; // Don't shoot self
+        const distToAlly = this.getDistanceTo(ally);
+        if (distToAlly < nearestDist) {
+          nearestDist = distToAlly;
+          nearestTarget = ally;
+        }
+      }
+    }
+
+    // Shoot at nearest target
+    if (nearestTarget) {
+      this.shoot(nearestTarget);
+      this.shootTimer = this.shootCooldown;
+    }
   }
 
-  shoot(player) {
-    // Calculate direction to player
-    const dx = player.getCenterX() - this.getCenterX();
-    const dy = player.getCenterY() - this.getCenterY();
+  shoot(target) {
+    // Calculate direction to target
+    const dx = target.getCenterX() - this.getCenterX();
+    const dy = target.getCenterY() - this.getCenterY();
     const dist = Math.sqrt(dx * dx + dy * dy);
 
     if (dist === 0) return;

@@ -890,6 +890,12 @@ export class PlayingState extends State {
       );
 
       const opp = new Opp(this.game, spawnPoint.x, spawnPoint.y, aggressionLevel);
+
+      // When beef is high (60%+), new opps immediately target safe house
+      if (beefLevel >= 60) {
+        opp.targetingSafeHouse = true;
+      }
+
       this.opps.push(opp);
 
       // Reset timer for next spawn
@@ -1113,6 +1119,13 @@ export class PlayingState extends State {
       // Make allies the same size as the player (48x64)
       ally.width = 48;
       ally.height = 64;
+      // Update collision box to match new size
+      ally.collisionBox = {
+        offsetX: 8,
+        offsetY: 16,
+        width: 32,
+        height: 48
+      };
 
       // Initialize animation
       ally.animationTimer = 0;
@@ -1149,6 +1162,13 @@ export class PlayingState extends State {
       // Make allies the same size as the player (48x64)
       ally.width = 48;
       ally.height = 64;
+      // Update collision box to match new size
+      ally.collisionBox = {
+        offsetX: 8,
+        offsetY: 16,
+        width: 32,
+        height: 48
+      };
 
       // Initialize animation
       ally.animationTimer = 0;
