@@ -70,6 +70,7 @@ export class UpgradeSelectionState extends State {
   
   update(deltaTime) {
     const input = this.game.inputManager;
+    const { width, height } = this.game;
 
     // Update animation
     this.animationTimer += deltaTime;
@@ -112,24 +113,44 @@ export class UpgradeSelectionState extends State {
         return;
       }
     }
-    
-    // Mouse support
+
+    // Calculate scale for mobile (same as render)
+    const isMobile = input.isMobile || width <= 900;
+    const scale = isMobile ? Math.min(height / 500, 0.8) : 1;
+
+    const cardWidth = 200 * scale;
+    const cardHeight = 250 * scale;
+    const cardSpacing = 20 * scale;
+    const totalWidth = this.upgrades.length * cardWidth + (this.upgrades.length - 1) * cardSpacing;
+    const startX = (width - totalWidth) / 2;
+    const cardY = isMobile ? 80 * scale : 200;
+
+    // Check for mobile tap first (more reliable on touch devices)
+    const menuTap = input.getMenuTap ? input.getMenuTap() : null;
+    if (menuTap) {
+      for (let i = 0; i < this.upgrades.length; i++) {
+        const cardX = startX + i * (cardWidth + cardSpacing);
+        if (menuTap.x >= cardX && menuTap.x < cardX + cardWidth &&
+            menuTap.y >= cardY && menuTap.y < cardY + cardHeight) {
+          this.selectedIndex = i;
+          this.selectUpgrade();
+          return;
+        }
+      }
+    }
+
+    // Mouse support (for desktop)
     const mousePos = input.getMousePosition();
     if (mousePos) {
-      const cardWidth = 200;
-      const cardSpacing = 20;
-      const totalWidth = this.upgrades.length * cardWidth + (this.upgrades.length - 1) * cardSpacing;
-      const startX = (this.game.width - totalWidth) / 2;
-      
       for (let i = 0; i < this.upgrades.length; i++) {
         const cardX = startX + i * (cardWidth + cardSpacing);
         if (mousePos.x >= cardX && mousePos.x < cardX + cardWidth &&
-            mousePos.y >= 200 && mousePos.y < 450) {
+            mousePos.y >= cardY && mousePos.y < cardY + cardHeight) {
           if (this.selectedIndex !== i) {
             this.selectedIndex = i;
             this.playSelectSound();
           }
-          
+
           if (input.isMouseButtonPressed(0)) { // 0 = left mouse button
             this.selectUpgrade();
           }
@@ -141,104 +162,113 @@ export class UpgradeSelectionState extends State {
   render(renderer, interpolation) {
     const ctx = renderer.ctx;
     const { width, height } = this.game;
-    
+    const input = this.game.inputManager;
+
+    // Calculate scale for mobile landscape
+    const isMobile = input?.isMobile || width <= 900;
+    const scale = isMobile ? Math.min(height / 500, 0.8) : 1;
+
     // Dark overlay
     ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
     ctx.fillRect(0, 0, width, height);
-    
+
     // Title - different for beef situations vs level up
     ctx.save();
-    ctx.font = 'bold 36px Arial';
+    ctx.font = `bold ${Math.floor(36 * scale)}px Arial`;
     ctx.textAlign = 'center';
+
+    const titleY = isMobile ? 30 * scale : 100;
+    const subtitleY = isMobile ? 55 * scale : 140;
 
     if (this.isBeefSituation) {
       ctx.fillStyle = '#ff4444';
-      ctx.fillText('BEEF IS HIGH!', width / 2, 100);
-      ctx.font = '20px Arial';
+      ctx.fillText('BEEF IS HIGH!', width / 2, titleY);
+      ctx.font = `${Math.floor(20 * scale)}px Arial`;
       ctx.fillStyle = '#ffaaaa';
-      ctx.fillText('Choose how to handle the situation:', width / 2, 140);
+      ctx.fillText('Choose how to handle:', width / 2, subtitleY);
     } else {
       ctx.fillStyle = '#fff';
-      ctx.fillText('LEVEL UP!', width / 2, 100);
-      ctx.font = '20px Arial';
-      ctx.fillText('Choose an upgrade:', width / 2, 140);
+      ctx.fillText('LEVEL UP!', width / 2, titleY);
+      ctx.font = `${Math.floor(20 * scale)}px Arial`;
+      ctx.fillText('Choose an upgrade:', width / 2, subtitleY);
     }
-    
-    // Render upgrade cards
-    const cardWidth = 200;
-    const cardHeight = 250;
-    const cardSpacing = 20;
+
+    // Render upgrade cards - scaled for mobile
+    const cardWidth = 200 * scale;
+    const cardHeight = 250 * scale;
+    const cardSpacing = 20 * scale;
     const totalWidth = this.upgrades.length * cardWidth + (this.upgrades.length - 1) * cardSpacing;
     const startX = (width - totalWidth) / 2;
-    const cardY = 200;
+    const cardY = isMobile ? 80 * scale : 200;
     
     this.upgrades.forEach((upgrade, index) => {
       const cardX = startX + index * (cardWidth + cardSpacing);
       const isSelected = index === this.selectedIndex;
-      
+
       // Card glow effect
       if (isSelected) {
         const glowSize = 5 + Math.sin(this.animationTimer * 4) * 2;
         ctx.shadowColor = '#ffff00';
         ctx.shadowBlur = glowSize;
       }
-      
+
       // Card background
       ctx.fillStyle = isSelected ? '#4a4a4a' : '#2a2a2a';
       ctx.fillRect(cardX, cardY, cardWidth, cardHeight);
-      
+
       // Card border
       ctx.strokeStyle = isSelected ? '#ffff00' : '#666';
       ctx.lineWidth = isSelected ? 3 : 2;
       ctx.strokeRect(cardX, cardY, cardWidth, cardHeight);
-      
+
       ctx.shadowBlur = 0;
-      
-      // Upgrade icon
-      ctx.font = '48px Arial';
+
+      // Upgrade icon - scaled
+      ctx.font = `${Math.floor(48 * scale)}px Arial`;
       ctx.textAlign = 'center';
       ctx.fillStyle = '#fff';
-      ctx.fillText(upgrade.icon || '✨', cardX + cardWidth / 2, cardY + 60);
-      
-      // Upgrade name
-      ctx.font = 'bold 18px Arial';
+      ctx.fillText(upgrade.icon || '✨', cardX + cardWidth / 2, cardY + 60 * scale);
+
+      // Upgrade name - scaled
+      ctx.font = `bold ${Math.floor(18 * scale)}px Arial`;
       ctx.fillStyle = '#fff';
-      ctx.fillText(upgrade.name, cardX + cardWidth / 2, cardY + 100);
-      
+      ctx.fillText(upgrade.name, cardX + cardWidth / 2, cardY + 100 * scale);
+
       // Current level
       const player = this.game.stateManager.getState('playing')?.player;
       const currentLevel = player?.upgradeLevels?.[upgrade.id] || 0;
-      
+
       if (currentLevel > 0) {
-        ctx.font = '14px Arial';
+        ctx.font = `${Math.floor(14 * scale)}px Arial`;
         ctx.fillStyle = '#aaa';
-        ctx.fillText(`Level ${currentLevel} → ${currentLevel + 1}`, cardX + cardWidth / 2, cardY + 125);
+        ctx.fillText(`Level ${currentLevel} → ${currentLevel + 1}`, cardX + cardWidth / 2, cardY + 125 * scale);
       }
-      
-      // Description
-      ctx.font = '14px Arial';
+
+      // Description - scaled
+      ctx.font = `${Math.floor(14 * scale)}px Arial`;
       ctx.fillStyle = '#ddd';
-      const lines = this.wrapText(upgrade.description, cardWidth - 20);
+      const lines = this.wrapText(upgrade.description, cardWidth - 20 * scale);
       lines.forEach((line, i) => {
-        ctx.fillText(line, cardX + cardWidth / 2, cardY + 155 + i * 20);
+        ctx.fillText(line, cardX + cardWidth / 2, cardY + 155 * scale + i * 20 * scale);
       });
-      
-      // Effect preview
-      ctx.font = 'bold 16px Arial';
+
+      // Effect preview - scaled
+      ctx.font = `bold ${Math.floor(16 * scale)}px Arial`;
       ctx.fillStyle = '#00ff00';
       const effectText = upgrade.getDescription(currentLevel + 1);
-      const effectLines = this.wrapText(effectText, cardWidth - 20, 'bold 16px Arial');
+      const effectLines = this.wrapText(effectText, cardWidth - 20 * scale, `bold ${Math.floor(16 * scale)}px Arial`);
       effectLines.forEach((line, i) => {
-        ctx.fillText(line, cardX + cardWidth / 2, cardY + 210 + i * 20);
+        ctx.fillText(line, cardX + cardWidth / 2, cardY + 210 * scale + i * 20 * scale);
       });
     });
     
-    // Instructions
-    ctx.font = '16px Arial';
+    // Instructions - scaled and mobile-friendly
+    ctx.font = `${Math.floor(14 * scale)}px Arial`;
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center';
-    ctx.fillText('Use ← → or mouse to select, Enter/Space/Click/1-3 to confirm', width / 2, height - 50);
-    
+    const instructionText = isMobile ? 'TAP an upgrade to select' : 'Use ← → or mouse to select, Enter/Space/Click to confirm';
+    ctx.fillText(instructionText, width / 2, height - 20 * scale);
+
     ctx.restore();
   }
   

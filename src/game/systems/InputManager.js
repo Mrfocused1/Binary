@@ -41,6 +41,13 @@ export class InputManager {
       tapTime: 0      // When the tap happened
     };
 
+    // Menu tap state (for UI interactions)
+    this.menuTap = {
+      active: false,  // Whether a menu tap happened this frame
+      x: 0,           // Tap position
+      y: 0
+    };
+
     // Minimum swipe distance to trigger auto-run (in pixels)
     this.swipeThreshold = 30;
     // Double-tap timeout (ms)
@@ -248,6 +255,11 @@ export class InputManager {
           this.tapShoot.active = true;
           this.tapShoot.tapTime = now;
           this.swipeMovement.lastTapTime = now;
+
+          // Also set menu tap for UI interactions
+          this.menuTap.active = true;
+          this.menuTap.x = pos.x;
+          this.menuTap.y = pos.y;
         }
 
         this.swipeMovement.touchId = null;
@@ -264,6 +276,9 @@ export class InputManager {
 
     // Simulate mouse click for menu compatibility
     if (event.changedTouches.length > 0) {
+      const pos = this.getTouchCanvasPosition(event.changedTouches[0]);
+      this.mouse.x = pos.x;
+      this.mouse.y = pos.y;
       this.mouse.buttons.set(0, true);
       setTimeout(() => this.mouse.buttons.delete(0), 100);
     }
@@ -324,6 +339,9 @@ export class InputManager {
     // Clear tap shoot after it's been processed
     this.tapShoot.active = false;
 
+    // Clear menu tap after it's been processed
+    this.menuTap.active = false;
+
     // Reset wheel delta
     this.mouse.wheel = 0;
   }
@@ -375,7 +393,15 @@ export class InputManager {
   getMouseWheel() {
     return this.mouse.wheel;
   }
-  
+
+  // Get menu tap (for mobile UI interactions)
+  getMenuTap() {
+    if (this.menuTap.active) {
+      return { x: this.menuTap.x, y: this.menuTap.y };
+    }
+    return null;
+  }
+
   // Movement vector (for player control)
   getMovementVector() {
     let x = 0;
