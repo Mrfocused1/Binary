@@ -337,13 +337,22 @@ export class PlayingState extends State {
     if (this.pendingUpgrades && this.pendingUpgrades.count > 0) {
       const mousePos = input.getMousePosition();
       const { width } = this.game;
-      // Indicator bounds (scaled for mobile)
-      const isMobileView = width <= 900 || this.mobileControls?.isTouchDevice;
+      // Calculate indicator bounds EXACTLY as in renderUI
+      const isMobileView = width <= 900 || this.game.inputManager?.isMobile;
       const scale = isMobileView ? 0.7 : 1;
-      const indicatorX = width - 160 * scale - 10;
-      const indicatorY = 90 * scale;
-      const indicatorWidth = 150 * scale;
-      const indicatorHeight = 45 * scale;
+
+      // Match the rendering calculations exactly
+      const timerWidth = 110 * scale;
+      const timerX = width - timerWidth - 10;
+      const timerY = 10 * scale;
+      const timerHeight = 40 * scale;
+      const oppCounterY = timerY + timerHeight + 5;
+      const oppCounterHeight = 30 * scale;
+
+      const indicatorX = timerX - 40 * scale;
+      const indicatorY = oppCounterY + oppCounterHeight + 5;
+      const indicatorWidth = timerWidth + 40 * scale;
+      const indicatorHeight = 40 * scale;
 
       if (mousePos && input.isMouseButtonPressed(0)) {
         if (mousePos.x >= indicatorX && mousePos.x <= indicatorX + indicatorWidth &&
@@ -871,7 +880,7 @@ export class PlayingState extends State {
       ctx.fillText(`${this.pendingUpgrades.count} UPGRADE${this.pendingUpgrades.count > 1 ? 'S' : ''}`, upgradeIndicatorX + upgradeIndicatorWidth / 2, upgradeIndicatorY + 14 * scale);
       ctx.font = `${Math.floor(11 * scale)}px Arial`;
       // Show different text for mobile vs desktop
-      const isMobile = this.game.inputManager.isMobile || this.mobileControls?.isTouchDevice;
+      const isMobile = this.game.inputManager?.isMobile;
       ctx.fillText(isMobile ? 'TAP to choose' : 'Press ESC', upgradeIndicatorX + upgradeIndicatorWidth / 2, upgradeIndicatorY + 28 * scale);
     }
 
