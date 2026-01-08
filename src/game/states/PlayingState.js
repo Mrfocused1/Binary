@@ -31,7 +31,7 @@ export class PlayingState extends State {
     // Add small buffer: 100 pixels on each side
     this.worldWidth = 1344; // Match background tile width
     this.worldHeight = 1152; // 1.5x background tile height (768 * 1.5)
-    this.unlockedWorldWidth = 1344; // Camera bounds - only unlock new areas after level progression
+    this.unlockedWorldWidth = 1280; // Start with camera width - section 2 unlocks after defeating Top Boy
     
     // Opp spawning
     this.oppSpawnTimer = 0;
@@ -1551,9 +1551,9 @@ export class PlayingState extends State {
         ally.animationTimer = 0;
       }
 
-      // Keep allies within world bounds
-      if (this.worldWidth && this.worldHeight) {
-        ally.x = Math.max(0, Math.min(this.worldWidth - ally.width, ally.x));
+      // Keep allies within unlocked world bounds
+      if (this.unlockedWorldWidth && this.worldHeight) {
+        ally.x = Math.max(0, Math.min(this.unlockedWorldWidth - ally.width, ally.x));
         ally.y = Math.max(0, Math.min(this.worldHeight - ally.height, ally.y));
       }
     }

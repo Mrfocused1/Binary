@@ -144,9 +144,9 @@ export class Player extends Entity {
       this.y = newY;
     }
     
-    // Keep within world bounds
-    if (state && state.worldWidth && state.worldHeight) {
-      this.x = Math.max(0, Math.min(state.worldWidth - this.width, this.x));
+    // Keep within unlocked world bounds (only allow movement in unlocked areas)
+    if (state && state.unlockedWorldWidth && state.worldHeight) {
+      this.x = Math.max(0, Math.min(state.unlockedWorldWidth - this.width, this.x));
       this.y = Math.max(0, Math.min(state.worldHeight - this.height, this.y));
     }
     
