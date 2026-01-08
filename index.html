@@ -118,6 +118,48 @@
       75% { transform: rotate(15deg); }
     }
 
+    /* Fullscreen prompt overlay */
+    #fullscreen-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.9);
+      z-index: 9998;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: #fff;
+      text-align: center;
+      padding: 20px;
+      cursor: pointer;
+    }
+
+    #fullscreen-overlay .fullscreen-icon {
+      font-size: 60px;
+      margin-bottom: 20px;
+    }
+
+    #fullscreen-overlay .fullscreen-text {
+      font-size: 24px;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+
+    #fullscreen-overlay .fullscreen-subtext {
+      font-size: 16px;
+      opacity: 0.7;
+    }
+
+    /* Show fullscreen prompt on mobile (landscape) when not in fullscreen */
+    @media screen and (max-width: 900px) and (orientation: landscape) {
+      #fullscreen-overlay.show-prompt {
+        display: flex;
+      }
+    }
+
     /* Mobile portrait mode - show rotate overlay */
     @media screen and (max-width: 900px) and (orientation: portrait) {
       #rotate-overlay {
@@ -157,30 +199,98 @@
     <div class="rotate-subtext">This game is best played in landscape mode</div>
   </div>
 
+  <!-- Fullscreen prompt overlay -->
+  <div id="fullscreen-overlay">
+    <div class="fullscreen-icon">⛶</div>
+    <div class="fullscreen-text">Tap to Play Fullscreen</div>
+    <div class="fullscreen-subtext">Hides the browser bar for the best experience</div>
+  </div>
+
   <div id="game-container">
     <canvas id="game-canvas"></canvas>
     <div id="loading">Loading Bine % Chalk...</div>
   </div>
 
   <script>
-    // Attempt to lock screen orientation to landscape on mobile
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+    // Check if we're in fullscreen mode
+    function isFullscreen() {
+      return !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+    }
+
+    // Enter fullscreen mode
+    function enterFullscreen() {
+      const elem = document.documentElement;
+      const requestFullscreen = elem.requestFullscreen || elem.webkitRequestFullscreen || elem.mozRequestFullScreen || elem.msRequestFullscreen;
+
+      if (requestFullscreen) {
+        requestFullscreen.call(elem).then(() => {
+          lockLandscape();
+          updateFullscreenPrompt();
+        }).catch(() => {
+          // Fullscreen request failed - hide prompt anyway
+          updateFullscreenPrompt();
+        });
+      }
+    }
+
+    // Lock to landscape orientation
     function lockLandscape() {
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       if (!isMobile) return;
 
       // Try to lock orientation using Screen Orientation API
       if (screen.orientation && screen.orientation.lock) {
         screen.orientation.lock('landscape').catch(() => {
           // Orientation lock failed - this is normal on iOS and some browsers
-          // CSS fallback will handle this
         });
       }
     }
 
-    // Try to lock on page load and on fullscreen change
-    document.addEventListener('DOMContentLoaded', lockLandscape);
-    document.addEventListener('fullscreenchange', lockLandscape);
-    document.addEventListener('webkitfullscreenchange', lockLandscape);
+    // Show/hide fullscreen prompt based on current state
+    function updateFullscreenPrompt() {
+      const overlay = document.getElementById('fullscreen-overlay');
+      if (!overlay) return;
+
+      // Only show on mobile when not in fullscreen and in landscape
+      const isLandscape = window.matchMedia('(orientation: landscape)').matches;
+      const shouldShow = isMobile && !isFullscreen() && isLandscape;
+
+      if (shouldShow) {
+        overlay.classList.add('show-prompt');
+      } else {
+        overlay.classList.remove('show-prompt');
+      }
+    }
+
+    // Initialize on DOM ready
+    document.addEventListener('DOMContentLoaded', () => {
+      const fullscreenOverlay = document.getElementById('fullscreen-overlay');
+
+      // Tap fullscreen overlay to enter fullscreen
+      if (fullscreenOverlay) {
+        fullscreenOverlay.addEventListener('click', enterFullscreen);
+        fullscreenOverlay.addEventListener('touchend', (e) => {
+          e.preventDefault();
+          enterFullscreen();
+        });
+      }
+
+      // Show fullscreen prompt on mobile
+      if (isMobile) {
+        updateFullscreenPrompt();
+      }
+
+      lockLandscape();
+    });
+
+    // Update prompt when fullscreen or orientation changes
+    document.addEventListener('fullscreenchange', updateFullscreenPrompt);
+    document.addEventListener('webkitfullscreenchange', updateFullscreenPrompt);
+    window.addEventListener('orientationchange', () => {
+      setTimeout(updateFullscreenPrompt, 100);
+    });
+    window.matchMedia('(orientation: landscape)').addEventListener('change', updateFullscreenPrompt);
   </script>
 
   <script type="module" src="/src/main.js"></script>
