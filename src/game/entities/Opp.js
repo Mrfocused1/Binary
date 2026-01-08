@@ -740,6 +740,10 @@ export class Opp extends Entity {
           // Left/right use the side shooting sprite (flipped as needed)
           sprite = this.game.assetLoader.getImage('topboyShoot');
         }
+        // Fallback for shooting - try the side sprite if directional fails
+        if (!sprite) {
+          sprite = this.game.assetLoader.getImage('topboyShoot');
+        }
       } else {
         sprite = this.game.assetLoader.getImage('topboyStand');
       }
@@ -1296,12 +1300,13 @@ export class Opp extends Entity {
     // Start shooting animation and store direction
     this.isShooting = true;
     this.shootingDirection = direction;
+    console.log('Top Boy shooting:', direction);
 
     // Clear shooting animation after burst completes
     setTimeout(() => {
       opp.isShooting = false;
       opp.shootingDirection = null;
-    }, 400); // 400ms for full burst
+    }, 800); // 800ms for visible animation
 
     // Fire first shot immediately
     const firstProjectile = new Projectile(
