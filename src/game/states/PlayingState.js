@@ -195,6 +195,13 @@ export class PlayingState extends State {
       duration: 3
     };
 
+    // Pending upgrades system - upgrades queue up and player opens menu with ESC/tap
+    this.pendingUpgrades = {
+      count: 0,
+      isBeefSituation: false,
+      flashTimer: 0
+    };
+
     console.log(`[OPP SPAWNING] World dimensions: ${this.worldWidth}x${this.worldHeight}`);
     console.log(`[OPP SPAWNING] Spawn points:`, this.spawnPoints);
     
@@ -325,22 +332,22 @@ export class PlayingState extends State {
       console.log('Manual focus recovery triggered');
       input.ensureFocus();
     }
-    
+
     // Check for tap on pending upgrades indicator (mobile support)
-    if (this.pendingUpgrades.count > 0) {
+    if (this.pendingUpgrades && this.pendingUpgrades.count > 0) {
       const mousePos = input.getMousePosition();
       const { width } = this.game;
-      // Indicator bounds: x = width - 160 to width - 10, y = 100 to 145
-      const indicatorBounds = {
-        x: width - 160,
-        y: 100,
-        width: 150,
-        height: 45
-      };
+      // Indicator bounds (scaled for mobile)
+      const isMobileView = width <= 900 || this.mobileControls?.isTouchDevice;
+      const scale = isMobileView ? 0.7 : 1;
+      const indicatorX = width - 160 * scale - 10;
+      const indicatorY = 90 * scale;
+      const indicatorWidth = 150 * scale;
+      const indicatorHeight = 45 * scale;
 
       if (mousePos && input.isMouseButtonPressed(0)) {
-        if (mousePos.x >= indicatorBounds.x && mousePos.x <= indicatorBounds.x + indicatorBounds.width &&
-            mousePos.y >= indicatorBounds.y && mousePos.y <= indicatorBounds.y + indicatorBounds.height) {
+        if (mousePos.x >= indicatorX && mousePos.x <= indicatorX + indicatorWidth &&
+            mousePos.y >= indicatorY && mousePos.y <= indicatorY + indicatorHeight) {
           // Tapped on upgrade indicator - open upgrade menu
           this.pendingUpgrades.count--;
           const isBeef = this.pendingUpgrades.isBeefSituation;
@@ -355,7 +362,7 @@ export class PlayingState extends State {
 
     // Handle ESC - open upgrade menu if upgrades pending, otherwise pause
     if (input.isKeyPressed('Escape')) {
-      if (this.pendingUpgrades.count > 0) {
+      if (this.pendingUpgrades && this.pendingUpgrades.count > 0) {
         // Open upgrade selection menu
         this.pendingUpgrades.count--;
         const isBeef = this.pendingUpgrades.isBeefSituation;
@@ -695,14 +702,18 @@ export class PlayingState extends State {
   renderUI(ctx) {
     const gameData = this.game.gameData;
     const { width, height } = this.game;
-    
+
+    // Detect mobile (smaller viewport or touch device)
+    const isMobileView = width <= 900 || this.mobileControls?.isTouchDevice;
+    const scale = isMobileView ? 0.7 : 1; // Scale down UI for mobile
+
     ctx.save();
-    
+
     // Top Center - Heat meter
-    const meterWidth = 300;
-    const meterHeight = 30;
+    const meterWidth = 300 * scale;
+    const meterHeight = 30 * scale;
     const meterX = width / 2 - meterWidth / 2;
-    const meterY = 20;
+    const meterY = 10 * scale;
 
     // Heat meter background
     ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
@@ -719,7 +730,7 @@ export class PlayingState extends State {
 
     // Heat meter text
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 20px Arial';
+    ctx.font = `bold ${Math.floor(20 * scale)}px Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(`BEEF: ${Math.floor(gameData.beefLevel)}%`, width / 2, meterY + meterHeight / 2);
@@ -806,27 +817,39 @@ export class PlayingState extends State {
     const minutes = Math.floor(timeRemaining / 60);
     const seconds = Math.floor(timeRemaining % 60);
 
+    const timerWidth = 110 * scale;
+    const timerHeight = 40 * scale;
+    const timerX = width - timerWidth - 10;
+    const timerY = 10 * scale;
+
     // Timer background
     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.fillRect(width - 120, 15, 110, 40);
+    ctx.fillRect(timerX, timerY, timerWidth, timerHeight);
 
-    ctx.font = '24px Arial';
+    ctx.font = `${Math.floor(24 * scale)}px Arial`;
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center';
-    ctx.fillText(`${minutes}:${seconds.toString().padStart(2, '0')}`, width - 65, 40);
-    
+    ctx.fillText(`${minutes}:${seconds.toString().padStart(2, '0')}`, timerX + timerWidth / 2, timerY + timerHeight / 2 + 3);
+
     // Opp counter below timer
+    const oppCounterY = timerY + timerHeight + 5;
+    const oppCounterHeight = 30 * scale;
     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.fillRect(width - 120, 60, 110, 35);
+    ctx.fillRect(timerX, oppCounterY, timerWidth, oppCounterHeight);
 
-    ctx.font = '18px Arial';
+    ctx.font = `${Math.floor(16 * scale)}px Arial`;
     ctx.fillStyle = '#fff';
-    ctx.fillText(`Opps: ${this.opps.length}/${this.maxOpps}`, width - 65, 82);
+    ctx.fillText(`Opps: ${this.opps.length}/${this.maxOpps}`, timerX + timerWidth / 2, oppCounterY + oppCounterHeight / 2 + 2);
 
-    // Pending upgrades indicator (top right, below opp counter)
-    if (this.pendingUpgrades.count > 0) {
+    // Pending upgrades indicator (below opp counter)
+    if (this.pendingUpgrades && this.pendingUpgrades.count > 0) {
       // Update flash timer
       this.pendingUpgrades.flashTimer += 0.05;
+
+      const upgradeIndicatorX = timerX - 40 * scale;
+      const upgradeIndicatorY = oppCounterY + oppCounterHeight + 5;
+      const upgradeIndicatorWidth = timerWidth + 40 * scale;
+      const upgradeIndicatorHeight = 40 * scale;
 
       // Flashing background
       const flashAlpha = 0.7 + Math.sin(this.pendingUpgrades.flashTimer * 8) * 0.3;
@@ -834,146 +857,95 @@ export class PlayingState extends State {
         `rgba(255, 50, 50, ${flashAlpha})` : `rgba(50, 200, 50, ${flashAlpha})`;
 
       ctx.fillStyle = bgColor;
-      ctx.fillRect(width - 160, 100, 150, 45);
+      ctx.fillRect(upgradeIndicatorX, upgradeIndicatorY, upgradeIndicatorWidth, upgradeIndicatorHeight);
 
       // Border
       ctx.strokeStyle = this.pendingUpgrades.isBeefSituation ? '#ff0000' : '#00ff00';
       ctx.lineWidth = 2;
-      ctx.strokeRect(width - 160, 100, 150, 45);
+      ctx.strokeRect(upgradeIndicatorX, upgradeIndicatorY, upgradeIndicatorWidth, upgradeIndicatorHeight);
 
       // Text
-      ctx.font = 'bold 14px Arial';
+      ctx.font = `bold ${Math.floor(14 * scale)}px Arial`;
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'center';
-      ctx.fillText(`${this.pendingUpgrades.count} UPGRADE${this.pendingUpgrades.count > 1 ? 'S' : ''}`, width - 85, 118);
-      ctx.font = '12px Arial';
+      ctx.fillText(`${this.pendingUpgrades.count} UPGRADE${this.pendingUpgrades.count > 1 ? 'S' : ''}`, upgradeIndicatorX + upgradeIndicatorWidth / 2, upgradeIndicatorY + 14 * scale);
+      ctx.font = `${Math.floor(11 * scale)}px Arial`;
       // Show different text for mobile vs desktop
-      const isMobile = this.game.inputManager.isMobile;
-      ctx.fillText(isMobile ? 'TAP to choose' : 'Press ESC to choose', width - 85, 135);
+      const isMobile = this.game.inputManager.isMobile || this.mobileControls?.isTouchDevice;
+      ctx.fillText(isMobile ? 'TAP to choose' : 'Press ESC', upgradeIndicatorX + upgradeIndicatorWidth / 2, upgradeIndicatorY + 28 * scale);
     }
 
     // Left Side Panel - Player Stats
-    const panelX = 10;
-    const panelY = 10;
-    const panelWidth = 250;
-    const panelHeight = 205; // Height to fit health, vest, stamina, and loot
-    
+    const panelX = 5 * scale;
+    const panelY = 5 * scale;
+    const panelWidth = 180 * scale;
+    const panelHeight = 130 * scale;
+
     // Panel background
     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
     ctx.fillRect(panelX, panelY, panelWidth, panelHeight);
-    
+
     // Level and XP
     ctx.textAlign = 'left';
-    ctx.font = 'bold 20px Arial';
+    ctx.font = `bold ${Math.floor(16 * scale)}px Arial`;
     ctx.fillStyle = '#fff';
-    ctx.fillText(`Level ${gameData.playerLevel}`, panelX + 10, panelY + 30);
-    
+    ctx.fillText(`Level ${gameData.playerLevel}`, panelX + 8 * scale, panelY + 18 * scale);
+
     // XP bar
-    const xpBarX = panelX + 10;
-    const xpBarY = panelY + 40;
-    const xpBarWidth = panelWidth - 20;
-    const xpBarHeight = 15;
-    
+    const xpBarX = panelX + 8 * scale;
+    const xpBarY = panelY + 25 * scale;
+    const xpBarWidth = panelWidth - 16 * scale;
+    const xpBarHeight = 12 * scale;
+
     ctx.fillStyle = '#333';
     ctx.fillRect(xpBarX, xpBarY, xpBarWidth, xpBarHeight);
-    
+
     const xpPercent = gameData.xp / gameData.xpToNext;
     ctx.fillStyle = '#4169E1';
     ctx.fillRect(xpBarX, xpBarY, xpBarWidth * xpPercent, xpBarHeight);
-    
+
     // XP text
-    ctx.font = '12px Arial';
+    ctx.font = `${Math.floor(10 * scale)}px Arial`;
     ctx.textAlign = 'center';
     ctx.fillStyle = '#fff';
-    ctx.fillText(`${gameData.xp} / ${gameData.xpToNext} XP`, xpBarX + xpBarWidth / 2, xpBarY + xpBarHeight / 2 + 1);
-    
+    ctx.fillText(`${gameData.xp} / ${gameData.xpToNext} XP`, xpBarX + xpBarWidth / 2, xpBarY + xpBarHeight / 2 + 3 * scale);
+
     if (this.player) {
       // Health bar
+      const barLabelX = panelX + 8 * scale;
+      const barStartX = panelX + 55 * scale;
+      const barWidth = panelWidth - 63 * scale;
+      const barHeight = 14 * scale;
+
       ctx.textAlign = 'left';
-      ctx.font = '16px Arial';
+      ctx.font = `${Math.floor(12 * scale)}px Arial`;
       ctx.fillStyle = '#fff';
-      ctx.fillText('Health', panelX + 10, panelY + 80);
+      ctx.fillText('HP', barLabelX, panelY + 52 * scale);
 
-      const healthBarX = panelX + 75;
-      const healthBarY = panelY + 65;
-      const healthBarWidth = panelWidth - 85;
-      const healthBarHeight = 20;
-
+      const healthBarY = panelY + 42 * scale;
       ctx.fillStyle = '#333';
-      ctx.fillRect(healthBarX, healthBarY, healthBarWidth, healthBarHeight);
+      ctx.fillRect(barStartX, healthBarY, barWidth, barHeight);
 
       const healthPercent = this.player.health / this.player.maxHealth;
       ctx.fillStyle = healthPercent > 0.5 ? '#00ff00' : healthPercent > 0.25 ? '#ffff00' : '#ff0000';
-      ctx.fillRect(healthBarX, healthBarY, healthBarWidth * healthPercent, healthBarHeight);
+      ctx.fillRect(barStartX, healthBarY, barWidth * healthPercent, barHeight);
 
-      // Health text
-      ctx.font = '12px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#fff';
-      ctx.fillText(`${Math.floor(this.player.health)} / ${this.player.maxHealth}`, healthBarX + healthBarWidth / 2, healthBarY + healthBarHeight / 2 + 4);
+      // Stamina bar
+      ctx.fillText('STA', barLabelX, panelY + 72 * scale);
 
-      // Vest bar (only show if player has vest)
-      if (this.player.hasVest) {
-        ctx.textAlign = 'left';
-        ctx.font = '16px Arial';
-        ctx.fillStyle = '#fff';
-        ctx.fillText('Vest', panelX + 10, panelY + 110);
-
-        const vestBarX = panelX + 75;
-        const vestBarY = panelY + 95;
-        const vestBarWidth = panelWidth - 85;
-        const vestBarHeight = 20;
-
-        ctx.fillStyle = '#333';
-        ctx.fillRect(vestBarX, vestBarY, vestBarWidth, vestBarHeight);
-
-        const vestPercent = this.player.vestHealth / this.player.maxVestHealth;
-        ctx.fillStyle = '#8844ff'; // Purple for vest
-        ctx.fillRect(vestBarX, vestBarY, vestBarWidth * vestPercent, vestBarHeight);
-
-        // Vest text
-        ctx.font = '12px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(`${Math.floor(this.player.vestHealth)} / ${this.player.maxVestHealth}`, vestBarX + vestBarWidth / 2, vestBarY + vestBarHeight / 2 + 4);
-      }
-
-      // Check if vest just broke - show notification
-      if (this.player.vestBroken) {
-        this.showAlert('🦺 VEST DESTROYED! 🦺');
-        this.player.vestBroken = false;
-      }
-
-      // Stamina bar (shifted down if vest exists)
-      const staminaYOffset = this.player.hasVest ? 30 : 0;
-      ctx.textAlign = 'left';
-      ctx.font = '16px Arial';
-      ctx.fillStyle = '#fff';
-      ctx.fillText('Stamina', panelX + 10, panelY + 110 + staminaYOffset);
-
-      const staminaBarX = panelX + 75;
-      const staminaBarY = panelY + 95 + staminaYOffset;
-      const staminaBarWidth = panelWidth - 85;
-      const staminaBarHeight = 20;
-
+      const staminaBarY = panelY + 62 * scale;
       ctx.fillStyle = '#333';
-      ctx.fillRect(staminaBarX, staminaBarY, staminaBarWidth, staminaBarHeight);
+      ctx.fillRect(barStartX, staminaBarY, barWidth, barHeight);
 
       const staminaPercent = this.player.stats.stamina / this.player.stats.maxStamina;
       ctx.fillStyle = '#00aaff';
-      ctx.fillRect(staminaBarX, staminaBarY, staminaBarWidth * staminaPercent, staminaBarHeight);
+      ctx.fillRect(barStartX, staminaBarY, barWidth * staminaPercent, barHeight);
 
-      // Stamina text
-      ctx.font = '12px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText(`${Math.floor(this.player.stats.stamina)} / ${this.player.stats.maxStamina}`, staminaBarX + staminaBarWidth / 2, staminaBarY + staminaBarHeight / 2 + 4);
-
-      // Loot carried indicator (shifted down if vest exists)
-      ctx.font = '16px Arial';
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#fff';
-      ctx.fillText(`Loot: ${this.player.carriedLoot.length} / ${this.player.stats.carrySlots}`, panelX + 10, panelY + 135 + staminaYOffset);
+      // Loot carried indicator
+      ctx.font = `${Math.floor(12 * scale)}px Arial`;
+      ctx.fillText(`Loot: ${this.player.carriedLoot.length}/${this.player.stats.carrySlots}`, barLabelX, panelY + 90 * scale);
     }
-    
+
     ctx.restore();
   }
   
@@ -1759,7 +1731,7 @@ export class PlayingState extends State {
         // Play stash sound
         this.playShelfSound();
 
-        // Queue upgrade every 5 stashes (player opens with ESC)
+        // Queue upgrade every 5 stashes (player opens with ESC/tap)
         if (this.game.gameData.lootStashed % 5 === 0) {
           this.pendingUpgrades.count++;
         }
@@ -1834,7 +1806,7 @@ export class PlayingState extends State {
       // 5. Make all opps (including Opp Block guards) scatter and surround player
       this.scatterAllOpps();
 
-      // Queue upgrade (beef situation) - player opens with ESC
+      // Queue beef upgrade selection (player opens with ESC/tap)
       this.pendingUpgrades.count++;
       this.pendingUpgrades.isBeefSituation = true;
     }
