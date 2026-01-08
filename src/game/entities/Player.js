@@ -14,7 +14,7 @@ export class Player extends Entity {
       carrySlots: 5,
       stamina: 100,
       maxStamina: 100,
-      chaosDampening: 0,
+      beefDampening: 0,
       xpMultiplier: 1.0 // For Reading Glasses upgrade
     };
 
@@ -448,8 +448,8 @@ export class Player extends Entity {
         this.stats.maxStamina += amount;
         this.stats.stamina += amount;
         break;
-      case 'chaosDampening':
-        this.stats.chaosDampening += amount;
+      case 'beefDampening':
+        this.stats.beefDampening += amount;
         break;
       case 'xpMultiplier':
         this.stats.xpMultiplier += amount;

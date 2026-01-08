@@ -3,12 +3,15 @@ import { Projectile } from './Projectile.js';
 
 export class Opp extends Entity {
   constructor(game, x, y, aggressionLevel = 1) {
-    super(x, y, 32, 40); // Slightly larger for better visibility
+    super(x, y, 48, 64); // Same size as player character
     this.game = game;
     this.aggressionLevel = aggressionLevel; // 1 = easy, 2 = normal, 3 = aggressive
-    
-    // Randomly select sprite type (1, 2, or 3)
-    this.spriteType = Math.floor(Math.random() * 3) + 1;
+
+    // Randomly select sprite type (1 or 3 only - opp2 is reserved for Top Boy)
+    this.spriteType = Math.random() < 0.5 ? 1 : 3;
+
+    // Top Boy properties (set externally when creating the Top Boy)
+    this.isTopBoy = false;
     
     // Movement properties - scale with aggression (faster for more street presence)
     this.speed = aggressionLevel === 1 ? 90 : aggressionLevel === 2 ? 110 : 130;
@@ -74,6 +77,11 @@ export class Opp extends Entity {
     this.isAlerted = false;
     this.alertTarget = null;
     this.guardPatrolRadius = 80; // How far guards wander from their post
+
+    // Surrounding behavior (when beef is triggered)
+    this.isSurrounding = false;
+    this.surroundAngle = Math.random() * Math.PI * 2; // Random angle to approach from
+    this.surroundDistance = 100 + Math.random() * 50; // Target distance from player
   }
 
   update(deltaTime) {
@@ -115,6 +123,11 @@ export class Opp extends Entity {
     // Push out of buildings if stuck inside
     this.pushOutOfBuildings();
 
+    // Top Boy health refill at Opp Block
+    if (this.isTopBoy) {
+      this.updateTopBoyBehavior(deltaTime);
+    }
+
     // State machine
     switch (this.state) {
       case 'wandering':
@@ -128,6 +141,12 @@ export class Opp extends Entity {
         break;
       case 'chasing':
         this.updateChasing(deltaTime);
+        break;
+      case 'hunting':
+        this.updateHunting(deltaTime);
+        break;
+      case 'retreating':
+        this.updateRetreating(deltaTime);
         break;
     }
 
@@ -273,9 +292,6 @@ export class Opp extends Entity {
           return;
         } else if (distToPlayer < this.playerDetectionRange) {
           // Non-chasers flee
-          if (this.state !== 'fleeing') {
-            this.game.gameData.oppsRepelled++;
-          }
           this.state = 'fleeing';
           this.playLaughingSound();
           return;
@@ -438,24 +454,192 @@ export class Opp extends Entity {
 
     const distToPlayer = this.getDistanceTo(player);
 
-    // Stop chasing if player is too far (unless alerted guard)
-    if (distToPlayer > this.playerDetectionRange * 3 && !this.isAlerted) {
+    // Stop chasing if player is too far (unless alerted guard or surrounding)
+    if (distToPlayer > this.playerDetectionRange * 3 && !this.isAlerted && !this.isSurrounding) {
       this.state = 'wandering';
       return;
     }
 
-    // Chase the player with smooth turning!
-    const dx = player.getCenterX() - this.getCenterX();
-    const dy = player.getCenterY() - this.getCenterY();
-    const dist = Math.sqrt(dx * dx + dy * dy);
+    const playerX = player.getCenterX();
+    const playerY = player.getCenterY();
 
-    if (dist > 0) {
-      // Smoothly turn toward player
-      this.targetDirection = Math.atan2(dy, dx);
-      this.direction = this.lerpAngle(this.direction, this.targetDirection, 5.0 * deltaTime);
+    // Surrounding behavior - try to circle around the player
+    if (this.isSurrounding) {
+      // Calculate target position around the player
+      const targetX = playerX + Math.cos(this.surroundAngle) * this.surroundDistance;
+      const targetY = playerY + Math.sin(this.surroundAngle) * this.surroundDistance;
 
-      this.vx = Math.cos(this.direction) * this.chaseSpeed;
-      this.vy = Math.sin(this.direction) * this.chaseSpeed;
+      const dx = targetX - this.getCenterX();
+      const dy = targetY - this.getCenterY();
+      const distToTarget = Math.sqrt(dx * dx + dy * dy);
+
+      // If close to surround position, slowly orbit and close in
+      if (distToTarget < 30) {
+        // Orbit around player (slowly change angle)
+        this.surroundAngle += 0.3 * deltaTime;
+        // Slowly close in
+        this.surroundDistance = Math.max(60, this.surroundDistance - 10 * deltaTime);
+      }
+
+      // Move toward target surround position
+      if (distToTarget > 0) {
+        this.targetDirection = Math.atan2(dy, dx);
+        this.direction = this.lerpAngle(this.direction, this.targetDirection, 4.0 * deltaTime);
+
+        // Move faster when far from position, slower when close
+        const speedMultiplier = Math.min(1.5, distToTarget / 100);
+        this.vx = Math.cos(this.direction) * this.chaseSpeed * speedMultiplier;
+        this.vy = Math.sin(this.direction) * this.chaseSpeed * speedMultiplier;
+      }
+    } else {
+      // Normal chase - go directly at player
+      const dx = playerX - this.getCenterX();
+      const dy = playerY - this.getCenterY();
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist > 0) {
+        // Smoothly turn toward player
+        this.targetDirection = Math.atan2(dy, dx);
+        this.direction = this.lerpAngle(this.direction, this.targetDirection, 5.0 * deltaTime);
+
+        this.vx = Math.cos(this.direction) * this.chaseSpeed;
+        this.vy = Math.sin(this.direction) * this.chaseSpeed;
+      }
+    }
+
+    // Apply movement with collision detection
+    this.applyMovement(deltaTime);
+  }
+
+  // Hunting behavior for allies - individualistic opp hunting
+  updateHunting(deltaTime) {
+    if (!this.isAlly) {
+      this.state = 'wandering';
+      return;
+    }
+
+    const state = this.game.stateManager.currentState;
+    if (!state) return;
+
+    const player = state.player;
+    const opps = state.opps || [];
+    const allies = state.allies || [];
+
+    // Update target switch timer
+    this.targetSwitchTimer = (this.targetSwitchTimer || 0) - deltaTime;
+
+    // Find a target opp to hunt
+    let targetOpp = this.currentTarget;
+
+    // Switch targets periodically or if current target is dead/gone
+    if (!targetOpp || targetOpp.isDead || targetOpp.isAlly || this.targetSwitchTimer <= 0) {
+      // Find opps not being targeted by other allies (or least targeted)
+      const oppTargetCounts = new Map();
+
+      for (const opp of opps) {
+        if (opp.isDead || opp.isAlly) continue;
+        oppTargetCounts.set(opp, 0);
+      }
+
+      // Count how many allies are targeting each opp
+      for (const ally of allies) {
+        if (ally === this || ally.isDead) continue;
+        if (ally.currentTarget && oppTargetCounts.has(ally.currentTarget)) {
+          oppTargetCounts.set(ally.currentTarget, oppTargetCounts.get(ally.currentTarget) + 1);
+        }
+      }
+
+      // Find the least-targeted opp that's closest to this ally
+      let bestOpp = null;
+      let bestScore = Infinity;
+
+      for (const [opp, targetCount] of oppTargetCounts) {
+        const dist = this.getDistanceTo(opp);
+        // Score based on distance and how many allies already targeting
+        const score = dist + targetCount * 200; // Penalize already-targeted opps
+        if (score < bestScore) {
+          bestScore = score;
+          bestOpp = opp;
+        }
+      }
+
+      targetOpp = bestOpp;
+      this.currentTarget = targetOpp;
+      this.targetSwitchTimer = 2 + Math.random() * 3; // 2-5 seconds before reconsidering
+    }
+
+    // Avoid stacking with other allies
+    let separationX = 0;
+    let separationY = 0;
+    const separationRadius = 50;
+
+    for (const ally of allies) {
+      if (ally === this || ally.isDead) continue;
+      const dx = this.getCenterX() - ally.getCenterX();
+      const dy = this.getCenterY() - ally.getCenterY();
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < separationRadius && dist > 0) {
+        // Push away from nearby allies
+        separationX += (dx / dist) * (separationRadius - dist) * 0.1;
+        separationY += (dy / dist) * (separationRadius - dist) * 0.1;
+      }
+    }
+
+    if (targetOpp) {
+      // Hunt the target opp
+      const dx = targetOpp.getCenterX() - this.getCenterX();
+      const dy = targetOpp.getCenterY() - this.getCenterY();
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist > 0) {
+        // Move toward target but maintain some distance for shooting
+        const idealDist = this.shootRange * 0.6; // Stay at 60% of shoot range
+
+        if (dist > idealDist + 30) {
+          // Move closer
+          this.targetDirection = Math.atan2(dy, dx);
+        } else if (dist < idealDist - 30) {
+          // Back up a bit
+          this.targetDirection = Math.atan2(-dy, -dx);
+        } else {
+          // Strafe around target
+          this.targetDirection = Math.atan2(dy, dx) + Math.PI / 2 * (this.allyIndex % 2 === 0 ? 1 : -1);
+        }
+
+        this.direction = this.lerpAngle(this.direction, this.targetDirection, 3.0 * deltaTime);
+
+        // Apply movement with separation
+        this.vx = Math.cos(this.direction) * this.speed + separationX;
+        this.vy = Math.sin(this.direction) * this.speed + separationY;
+      }
+    } else if (player) {
+      // No opps to hunt - patrol around player at preferred distance
+      const dx = player.getCenterX() - this.getCenterX();
+      const dy = player.getCenterY() - this.getCenterY();
+      const distToPlayer = Math.sqrt(dx * dx + dy * dy);
+
+      // Each ally patrols at a different angle around the player
+      this.patrolAngleOffset = (this.patrolAngleOffset || 0) + 0.3 * deltaTime;
+      const patrolX = player.getCenterX() + Math.cos(this.patrolAngleOffset) * (this.preferredDistance || 100);
+      const patrolY = player.getCenterY() + Math.sin(this.patrolAngleOffset) * (this.preferredDistance || 100);
+
+      const toPatrolX = patrolX - this.getCenterX();
+      const toPatrolY = patrolY - this.getCenterY();
+      const distToPatrol = Math.sqrt(toPatrolX * toPatrolX + toPatrolY * toPatrolY);
+
+      if (distToPatrol > 20) {
+        this.targetDirection = Math.atan2(toPatrolY, toPatrolX);
+        this.direction = this.lerpAngle(this.direction, this.targetDirection, 2.0 * deltaTime);
+
+        const patrolSpeed = Math.min(this.speed * 0.7, distToPatrol);
+        this.vx = Math.cos(this.direction) * patrolSpeed + separationX;
+        this.vy = Math.sin(this.direction) * patrolSpeed + separationY;
+      } else {
+        // Near patrol point, slow down
+        this.vx = separationX;
+        this.vy = separationY;
+      }
     }
 
     // Apply movement with collision detection
@@ -475,10 +659,6 @@ export class Opp extends Entity {
     if (player) {
       const distToPlayer = this.getDistanceTo(player);
       if (distToPlayer < this.playerDetectionRange) {
-        // Track opp being repelled
-        if (this.state !== 'fleeing') {
-          this.game.gameData.oppsRepelled++;
-        }
         this.state = 'fleeing';
         this.playLaughingSound();
         return;
@@ -989,6 +1169,11 @@ export class Opp extends Entity {
   }
 
   knockback(directionX, directionY, force = 300) {
+    // Top Boy has knockback resistance
+    if (this.isTopBoy) {
+      force = force * 0.3; // 70% knockback resistance
+    }
+
     // Apply knockback velocity
     this.vx = directionX * force;
     this.vy = directionY * force;
@@ -997,16 +1182,145 @@ export class Opp extends Entity {
     this.isKnockedBack = true;
     this.knockbackTimer = this.knockbackRecoveryTime;
 
-    // Track as repelled
-    this.game.gameData.oppsRepelled++;
-
     // Reset laugh sound so it can play again when they recover
     this.hasPlayedLaughSound = false;
+  }
+
+  // Top Boy retreating to Opp Block for health
+  updateRetreating(deltaTime) {
+    if (!this.isTopBoy) {
+      this.state = 'wandering';
+      return;
+    }
+
+    const state = this.game.stateManager.currentState;
+    if (!state || !state.oppBlock) {
+      this.state = 'chasing';
+      return;
+    }
+
+    const oppBlock = state.oppBlock;
+    const dx = oppBlock.getCenterX() - this.getCenterX();
+    const dy = oppBlock.getCenterY() - this.getCenterY();
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist > 50) {
+      // Move toward Opp Block
+      this.targetDirection = Math.atan2(dy, dx);
+      this.direction = this.lerpAngle(this.direction, this.targetDirection, 4.0 * deltaTime);
+
+      // Run fast when retreating
+      this.vx = Math.cos(this.direction) * this.fleeSpeed;
+      this.vy = Math.sin(this.direction) * this.fleeSpeed;
+
+      this.applyMovement(deltaTime);
+    } else {
+      // At Opp Block - stop and heal (healing handled in updateTopBoyBehavior)
+      this.vx = 0;
+      this.vy = 0;
+    }
+  }
+
+  // Top Boy special behavior
+  updateTopBoyBehavior(deltaTime) {
+    const state = this.game.stateManager.currentState;
+    if (!state || !state.oppBlock) return;
+
+    const oppBlock = state.oppBlock;
+    const distToOppBlock = this.getDistanceTo(oppBlock);
+
+    // Check if health is low and should retreat
+    const healthPercent = this.health / this.maxHealth;
+
+    if (healthPercent < 0.3 && !this.isRetreating) {
+      // Low health - retreat to Opp Block
+      this.isRetreating = true;
+      this.state = 'retreating';
+    }
+
+    // If near Opp Block and retreating, heal
+    if (distToOppBlock < 100 && this.isRetreating) {
+      // Heal while at Opp Block
+      this.health = Math.min(this.maxHealth, this.health + 30 * deltaTime); // 30 HP per second
+
+      // Stop retreating when fully healed
+      if (this.health >= this.maxHealth) {
+        this.isRetreating = false;
+        this.state = 'chasing';
+      }
+    }
+  }
+
+  // Top Boy AK47 burst fire
+  shootAK47(target) {
+    const state = this.game.stateManager.currentState;
+    if (!state || !state.addProjectile) return;
+
+    // Calculate direction to target
+    const dx = target.getCenterX() - this.getCenterX();
+    const dy = target.getCenterY() - this.getCenterY();
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist === 0) return;
+
+    // Determine projectile direction (4-directional)
+    let direction;
+    if (Math.abs(dx) > Math.abs(dy)) {
+      direction = dx > 0 ? 'right' : 'left';
+    } else {
+      direction = dy > 0 ? 'down' : 'up';
+    }
+
+    // Store reference for setTimeout
+    const game = this.game;
+    const opp = this;
+
+    // Fire first shot immediately
+    const firstProjectile = new Projectile(
+      game,
+      this.getCenterX() - 8,
+      this.getCenterY() - 8,
+      direction,
+      'opp'
+    );
+    firstProjectile.damage = 15;
+    firstProjectile.speed = 400;
+    state.addProjectile(firstProjectile);
+
+    // Burst fire - 2 more shots with delay
+    for (let i = 1; i < 3; i++) {
+      setTimeout(() => {
+        if (opp.isDead) return;
+
+        const currentState = game.stateManager.currentState;
+        if (!currentState || !currentState.addProjectile) return;
+
+        const projectile = new Projectile(
+          game,
+          opp.getCenterX() - 8,
+          opp.getCenterY() - 8,
+          direction,
+          'opp'
+        );
+        projectile.damage = 15; // Higher damage
+        projectile.speed = 400; // Faster bullets
+
+        currentState.addProjectile(projectile);
+      }, i * 100); // 100ms between shots
+    }
   }
 
   updateShooting(deltaTime) {
     // Don't shoot while knocked back or fleeing (allies always can shoot)
     if (this.isKnockedBack || (!this.isAlly && this.state === 'fleeing')) return;
+
+    // Top Boy doesn't shoot while healing at Opp Block
+    if (this.isTopBoy && this.state === 'retreating') {
+      const state = this.game.stateManager.currentState;
+      if (state && state.oppBlock) {
+        const distToOppBlock = this.getDistanceTo(state.oppBlock);
+        if (distToOppBlock < 100) return; // Healing, don't shoot
+      }
+    }
 
     // Update shoot timer
     this.shootTimer -= deltaTime;
@@ -1043,8 +1357,14 @@ export class Opp extends Entity {
 
     // Shoot at nearest target
     if (nearestTarget) {
-      this.shoot(nearestTarget);
-      this.shootTimer = this.shootCooldown;
+      // Top Boy uses AK47 burst fire
+      if (this.isTopBoy) {
+        this.shootAK47(nearestTarget);
+        this.shootTimer = this.shootCooldown * 1.5; // Longer cooldown for burst
+      } else {
+        this.shoot(nearestTarget);
+        this.shootTimer = this.shootCooldown;
+      }
     }
   }
 

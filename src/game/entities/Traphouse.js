@@ -77,18 +77,11 @@ export class Traphouse extends Entity {
       ctx.strokeRect(this.x, this.y, this.width, this.height);
     }
 
-    // Draw color indicator (banner on building)
-    ctx.save();
-    ctx.fillStyle = this.getColorHex();
-    ctx.globalAlpha = 0.8;
-    ctx.fillRect(this.x + 10, this.y + this.height - 20, this.width - 20, 12);
-    ctx.restore();
-
     // Draw loot indicator (glowing outline when has loot - player target)
     if (this.hasLoot()) {
       ctx.save();
       ctx.globalAlpha = this.lootGlow * 0.6;
-      ctx.strokeStyle = this.getColorHex();
+      ctx.strokeStyle = '#ffcc00'; // Gold glow for loot
       ctx.lineWidth = 4;
       ctx.strokeRect(this.x + 5, this.y + 5, this.width - 10, this.height - 10);
       ctx.restore();

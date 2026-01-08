@@ -78,14 +78,20 @@ export function getRandomUpgrades(count = 3, playerUpgrades = {}, includeBeefOpt
   return shuffled.slice(0, Math.min(count, shuffled.length));
 }
 
-// Get upgrades for beef situation (always includes Slew Dem)
-export function getBeefUpgrades(count = 3, playerUpgrades = {}) {
-  const upgrades = getRandomUpgrades(count - 1, playerUpgrades, false);
+// Get upgrades for beef situation (includes Slew Dem if not at max allies)
+export function getBeefUpgrades(count = 3, playerUpgrades = {}, currentAllyCount = 0) {
+  const maxAllies = 3;
+  const canSpawnMoreAllies = currentAllyCount < maxAllies;
 
-  // Always add Slew Dem (no limit!)
-  upgrades.unshift(UPGRADES.slewDem); // Put Slew Dem first
-
-  return upgrades.slice(0, count);
+  if (canSpawnMoreAllies) {
+    // Include Slew Dem option
+    const upgrades = getRandomUpgrades(count - 1, playerUpgrades, false);
+    upgrades.unshift(UPGRADES.slewDem); // Put Slew Dem first
+    return upgrades.slice(0, count);
+  } else {
+    // At max allies - don't show Slew Dem
+    return getRandomUpgrades(count, playerUpgrades, false);
+  }
 }
 
 // Get upgrade by ID

@@ -18,13 +18,15 @@ export class UpgradeSelectionState extends State {
     // Check if this is a beef situation
     this.isBeefSituation = data.isBeefSituation || false;
 
-    // Get player's current upgrades
-    const player = this.game.stateManager.getState('playing')?.player;
+    // Get player's current upgrades and ally count
+    const playingState = this.game.stateManager.getState('playing');
+    const player = playingState?.player;
     const playerUpgrades = player?.upgradeLevels || {};
+    const currentAllyCount = playingState?.allies?.filter(a => !a.isDead).length || 0;
 
-    // Get upgrades - beef situation includes Slew Dem option
+    // Get upgrades - beef situation includes Slew Dem option (if not at max allies)
     if (this.isBeefSituation) {
-      this.upgrades = getBeefUpgrades(3, playerUpgrades);
+      this.upgrades = getBeefUpgrades(3, playerUpgrades, currentAllyCount);
     } else {
       this.upgrades = getRandomUpgrades(3, playerUpgrades);
     }

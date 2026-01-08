@@ -42,8 +42,8 @@ export class Game {
     
     // Game-specific data
     this.gameData = {
-      chaosLevel: 0,
-      maxChaos: 100,
+      beefLevel: 0,
+      maxBeef: 100,
       playerLevel: 1,
       xp: 0,
       xpToNext: 100,
@@ -51,9 +51,9 @@ export class Game {
       targetTime: 30 * 60, // 30 minutes in seconds
       isPaused: false,
       // Stats tracking
-      booksCollected: 0,
-      booksShelved: 0,
-      oppsRepelled: 0
+      lootCollected: 0,
+      lootStashed: 0,
+      bodiesDropped: 0
     };
   }
   
