@@ -160,6 +160,13 @@ export class PlayingState extends State {
       duration: 3
     };
 
+    // Pending upgrades system - upgrades queue up and player opens menu with ESC/tap
+    this.pendingUpgrades = {
+      count: 0,
+      isBeefSituation: false,
+      flashTimer: 0
+    };
+
     console.log(`[OPP SPAWNING] World dimensions: ${this.worldWidth}x${this.worldHeight}`);
     console.log(`[OPP SPAWNING] Spawn points:`, this.spawnPoints);
     
@@ -277,10 +284,57 @@ export class PlayingState extends State {
       console.log('Manual focus recovery triggered');
       input.ensureFocus();
     }
-    
-    // Handle pause
-    if (input.isKeyPressed('p') || input.isKeyPressed('Escape')) {
-      // Pause music when pausing game
+
+    // Check for tap on pending upgrades indicator (mobile support)
+    if (this.pendingUpgrades && this.pendingUpgrades.count > 0) {
+      const mousePos = input.getMousePosition();
+      const { width } = this.game;
+      // Indicator bounds (scaled for mobile)
+      const isMobileView = width <= 900 || this.mobileControls?.isTouchDevice;
+      const scale = isMobileView ? 0.7 : 1;
+      const indicatorX = width - 160 * scale - 10;
+      const indicatorY = 90 * scale;
+      const indicatorWidth = 150 * scale;
+      const indicatorHeight = 45 * scale;
+
+      if (mousePos && input.isMouseButtonPressed(0)) {
+        if (mousePos.x >= indicatorX && mousePos.x <= indicatorX + indicatorWidth &&
+            mousePos.y >= indicatorY && mousePos.y <= indicatorY + indicatorHeight) {
+          // Tapped on upgrade indicator - open upgrade menu
+          this.pendingUpgrades.count--;
+          const isBeef = this.pendingUpgrades.isBeefSituation;
+          if (this.pendingUpgrades.count === 0) {
+            this.pendingUpgrades.isBeefSituation = false;
+          }
+          this.game.stateManager.pushState('upgradeSelection', { isBeefSituation: isBeef });
+          return;
+        }
+      }
+    }
+
+    // Handle ESC - open upgrade menu if upgrades pending, otherwise pause
+    if (input.isKeyPressed('Escape')) {
+      if (this.pendingUpgrades && this.pendingUpgrades.count > 0) {
+        // Open upgrade selection menu
+        this.pendingUpgrades.count--;
+        const isBeef = this.pendingUpgrades.isBeefSituation;
+        if (this.pendingUpgrades.count === 0) {
+          this.pendingUpgrades.isBeefSituation = false;
+        }
+        this.game.stateManager.pushState('upgradeSelection', { isBeefSituation: isBeef });
+        return;
+      } else {
+        // No pending upgrades - normal pause
+        if (this.bgMusic) {
+          this.bgMusic.pause();
+        }
+        this.game.stateManager.pushState('paused');
+        return;
+      }
+    }
+
+    // Handle P for pause only (no upgrade check)
+    if (input.isKeyPressed('p')) {
       if (this.bgMusic) {
         this.bgMusic.pause();
       }
@@ -675,7 +729,41 @@ export class PlayingState extends State {
     ctx.font = `${Math.floor(16 * scale)}px Arial`;
     ctx.fillStyle = '#fff';
     ctx.fillText(`Opps: ${this.opps.length}/${this.maxOpps}`, timerX + timerWidth / 2, oppCounterY + oppCounterHeight / 2 + 2);
-    
+
+    // Pending upgrades indicator (below opp counter)
+    if (this.pendingUpgrades && this.pendingUpgrades.count > 0) {
+      // Update flash timer
+      this.pendingUpgrades.flashTimer += 0.05;
+
+      const upgradeIndicatorX = timerX - 40 * scale;
+      const upgradeIndicatorY = oppCounterY + oppCounterHeight + 5;
+      const upgradeIndicatorWidth = timerWidth + 40 * scale;
+      const upgradeIndicatorHeight = 40 * scale;
+
+      // Flashing background
+      const flashAlpha = 0.7 + Math.sin(this.pendingUpgrades.flashTimer * 8) * 0.3;
+      const bgColor = this.pendingUpgrades.isBeefSituation ?
+        `rgba(255, 50, 50, ${flashAlpha})` : `rgba(50, 200, 50, ${flashAlpha})`;
+
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(upgradeIndicatorX, upgradeIndicatorY, upgradeIndicatorWidth, upgradeIndicatorHeight);
+
+      // Border
+      ctx.strokeStyle = this.pendingUpgrades.isBeefSituation ? '#ff0000' : '#00ff00';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(upgradeIndicatorX, upgradeIndicatorY, upgradeIndicatorWidth, upgradeIndicatorHeight);
+
+      // Text
+      ctx.font = `bold ${Math.floor(14 * scale)}px Arial`;
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${this.pendingUpgrades.count} UPGRADE${this.pendingUpgrades.count > 1 ? 'S' : ''}`, upgradeIndicatorX + upgradeIndicatorWidth / 2, upgradeIndicatorY + 14 * scale);
+      ctx.font = `${Math.floor(11 * scale)}px Arial`;
+      // Show different text for mobile vs desktop
+      const isMobile = this.game.inputManager.isMobile || this.mobileControls?.isTouchDevice;
+      ctx.fillText(isMobile ? 'TAP to choose' : 'Press ESC', upgradeIndicatorX + upgradeIndicatorWidth / 2, upgradeIndicatorY + 28 * scale);
+    }
+
     // Left Side Panel - Player Stats
     const panelX = 5 * scale;
     const panelY = 5 * scale;
@@ -1446,9 +1534,9 @@ export class PlayingState extends State {
         // Play stash sound
         this.playShelfSound();
 
-        // Trigger upgrade selection every 5 stashes
+        // Queue upgrade every 5 stashes (player opens with ESC/tap)
         if (this.game.gameData.lootStashed % 5 === 0) {
-          this.game.stateManager.pushState('upgradeSelection', { isBeefSituation: false });
+          this.pendingUpgrades.count++;
         }
       }
     }
@@ -1515,8 +1603,9 @@ export class PlayingState extends State {
       // 3. Make all opps target the safe house
       this.setOppsSafeHouseTarget();
 
-      // Show upgrade selection
-      this.game.stateManager.pushState('upgradeSelection', { isBeefSituation: true });
+      // Queue beef upgrade selection (player opens with ESC/tap)
+      this.pendingUpgrades.count++;
+      this.pendingUpgrades.isBeefSituation = true;
     }
 
     // Reset flag when beef drops below 40% (so it can trigger again)
