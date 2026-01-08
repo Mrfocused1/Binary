@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <!-- Force landscape orientation on mobile -->
+  <meta name="screen-orientation" content="landscape">
   <!-- Mobile app meta tags -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -74,13 +76,113 @@
     .hidden {
       display: none !important;
     }
+
+    /* Rotate device overlay - shown in portrait mode on mobile */
+    #rotate-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #000;
+      z-index: 9999;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: #fff;
+      text-align: center;
+      padding: 20px;
+    }
+
+    #rotate-overlay .rotate-icon {
+      font-size: 80px;
+      margin-bottom: 20px;
+      animation: rotate-hint 2s ease-in-out infinite;
+    }
+
+    #rotate-overlay .rotate-text {
+      font-size: 24px;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+
+    #rotate-overlay .rotate-subtext {
+      font-size: 16px;
+      opacity: 0.7;
+    }
+
+    @keyframes rotate-hint {
+      0%, 100% { transform: rotate(0deg); }
+      25% { transform: rotate(-15deg); }
+      75% { transform: rotate(15deg); }
+    }
+
+    /* Mobile portrait mode - show rotate overlay */
+    @media screen and (max-width: 900px) and (orientation: portrait) {
+      #rotate-overlay {
+        display: flex;
+      }
+
+      #game-container {
+        /* Hide game in portrait - show rotate message instead */
+        opacity: 0;
+        pointer-events: none;
+      }
+    }
+
+    /* Mobile landscape mode - full screen game */
+    @media screen and (max-width: 900px) and (orientation: landscape) {
+      body {
+        /* Use full viewport in landscape */
+        width: 100vw;
+        height: 100vh;
+      }
+
+      #game-canvas {
+        /* Fill the screen in landscape mode */
+        width: 100vw;
+        height: 100vh;
+        max-width: none;
+        object-fit: contain;
+      }
+    }
   </style>
 </head>
 <body>
+  <!-- Rotate device overlay for portrait mode -->
+  <div id="rotate-overlay">
+    <div class="rotate-icon">📱</div>
+    <div class="rotate-text">Please Rotate Your Device</div>
+    <div class="rotate-subtext">This game is best played in landscape mode</div>
+  </div>
+
   <div id="game-container">
     <canvas id="game-canvas"></canvas>
     <div id="loading">Loading Bine % Chalk...</div>
   </div>
+
+  <script>
+    // Attempt to lock screen orientation to landscape on mobile
+    function lockLandscape() {
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      if (!isMobile) return;
+
+      // Try to lock orientation using Screen Orientation API
+      if (screen.orientation && screen.orientation.lock) {
+        screen.orientation.lock('landscape').catch(() => {
+          // Orientation lock failed - this is normal on iOS and some browsers
+          // CSS fallback will handle this
+        });
+      }
+    }
+
+    // Try to lock on page load and on fullscreen change
+    document.addEventListener('DOMContentLoaded', lockLandscape);
+    document.addEventListener('fullscreenchange', lockLandscape);
+    document.addEventListener('webkitfullscreenchange', lockLandscape);
+  </script>
+
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>
