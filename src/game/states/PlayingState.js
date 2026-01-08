@@ -584,14 +584,18 @@ export class PlayingState extends State {
   renderUI(ctx) {
     const gameData = this.game.gameData;
     const { width, height } = this.game;
-    
+
+    // Detect mobile (smaller viewport or touch device)
+    const isMobileView = width <= 900 || this.mobileControls?.isTouchDevice;
+    const scale = isMobileView ? 0.7 : 1; // Scale down UI for mobile
+
     ctx.save();
-    
+
     // Top Center - Heat meter
-    const meterWidth = 300;
-    const meterHeight = 30;
+    const meterWidth = 300 * scale;
+    const meterHeight = 30 * scale;
     const meterX = width / 2 - meterWidth / 2;
-    const meterY = 20;
+    const meterY = 10 * scale;
 
     // Heat meter background
     ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
@@ -608,7 +612,7 @@ export class PlayingState extends State {
 
     // Heat meter text
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 20px Arial';
+    ctx.font = `bold ${Math.floor(20 * scale)}px Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(`BEEF: ${Math.floor(gameData.beefLevel)}%`, width / 2, meterY + meterHeight / 2);
@@ -647,114 +651,102 @@ export class PlayingState extends State {
     const timeRemaining = Math.max(0, gameData.targetTime - gameData.elapsedTime);
     const minutes = Math.floor(timeRemaining / 60);
     const seconds = Math.floor(timeRemaining % 60);
-    
+
+    const timerWidth = 110 * scale;
+    const timerHeight = 40 * scale;
+    const timerX = width - timerWidth - 10;
+    const timerY = 10 * scale;
+
     // Timer background
     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.fillRect(width - 120, 15, 110, 40);
-    
-    ctx.font = '24px Arial';
+    ctx.fillRect(timerX, timerY, timerWidth, timerHeight);
+
+    ctx.font = `${Math.floor(24 * scale)}px Arial`;
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center';
-    ctx.fillText(`${minutes}:${seconds.toString().padStart(2, '0')}`, width - 65, 40);
-    
-    // Opp counter below timer
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.fillRect(width - 120, 60, 110, 35);
+    ctx.fillText(`${minutes}:${seconds.toString().padStart(2, '0')}`, timerX + timerWidth / 2, timerY + timerHeight / 2 + 3);
 
-    ctx.font = '18px Arial';
+    // Opp counter below timer
+    const oppCounterY = timerY + timerHeight + 5;
+    const oppCounterHeight = 30 * scale;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(timerX, oppCounterY, timerWidth, oppCounterHeight);
+
+    ctx.font = `${Math.floor(16 * scale)}px Arial`;
     ctx.fillStyle = '#fff';
-    ctx.fillText(`Opps: ${this.opps.length}/${this.maxOpps}`, width - 65, 82);
+    ctx.fillText(`Opps: ${this.opps.length}/${this.maxOpps}`, timerX + timerWidth / 2, oppCounterY + oppCounterHeight / 2 + 2);
     
     // Left Side Panel - Player Stats
-    const panelX = 10;
-    const panelY = 10;
-    const panelWidth = 250;
-    const panelHeight = 175; // Height to fit health, stamina, and loot
-    
+    const panelX = 5 * scale;
+    const panelY = 5 * scale;
+    const panelWidth = 180 * scale;
+    const panelHeight = 130 * scale;
+
     // Panel background
     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
     ctx.fillRect(panelX, panelY, panelWidth, panelHeight);
-    
+
     // Level and XP
     ctx.textAlign = 'left';
-    ctx.font = 'bold 20px Arial';
+    ctx.font = `bold ${Math.floor(16 * scale)}px Arial`;
     ctx.fillStyle = '#fff';
-    ctx.fillText(`Level ${gameData.playerLevel}`, panelX + 10, panelY + 30);
-    
+    ctx.fillText(`Level ${gameData.playerLevel}`, panelX + 8 * scale, panelY + 18 * scale);
+
     // XP bar
-    const xpBarX = panelX + 10;
-    const xpBarY = panelY + 40;
-    const xpBarWidth = panelWidth - 20;
-    const xpBarHeight = 15;
-    
+    const xpBarX = panelX + 8 * scale;
+    const xpBarY = panelY + 25 * scale;
+    const xpBarWidth = panelWidth - 16 * scale;
+    const xpBarHeight = 12 * scale;
+
     ctx.fillStyle = '#333';
     ctx.fillRect(xpBarX, xpBarY, xpBarWidth, xpBarHeight);
-    
+
     const xpPercent = gameData.xp / gameData.xpToNext;
     ctx.fillStyle = '#4169E1';
     ctx.fillRect(xpBarX, xpBarY, xpBarWidth * xpPercent, xpBarHeight);
-    
+
     // XP text
-    ctx.font = '12px Arial';
+    ctx.font = `${Math.floor(10 * scale)}px Arial`;
     ctx.textAlign = 'center';
     ctx.fillStyle = '#fff';
-    ctx.fillText(`${gameData.xp} / ${gameData.xpToNext} XP`, xpBarX + xpBarWidth / 2, xpBarY + xpBarHeight / 2 + 1);
-    
+    ctx.fillText(`${gameData.xp} / ${gameData.xpToNext} XP`, xpBarX + xpBarWidth / 2, xpBarY + xpBarHeight / 2 + 3 * scale);
+
     if (this.player) {
       // Health bar
+      const barLabelX = panelX + 8 * scale;
+      const barStartX = panelX + 55 * scale;
+      const barWidth = panelWidth - 63 * scale;
+      const barHeight = 14 * scale;
+
       ctx.textAlign = 'left';
-      ctx.font = '16px Arial';
+      ctx.font = `${Math.floor(12 * scale)}px Arial`;
       ctx.fillStyle = '#fff';
-      ctx.fillText('Health', panelX + 10, panelY + 80);
+      ctx.fillText('HP', barLabelX, panelY + 52 * scale);
 
-      const healthBarX = panelX + 75;
-      const healthBarY = panelY + 65;
-      const healthBarWidth = panelWidth - 85;
-      const healthBarHeight = 20;
-
+      const healthBarY = panelY + 42 * scale;
       ctx.fillStyle = '#333';
-      ctx.fillRect(healthBarX, healthBarY, healthBarWidth, healthBarHeight);
+      ctx.fillRect(barStartX, healthBarY, barWidth, barHeight);
 
       const healthPercent = this.player.health / this.player.maxHealth;
       ctx.fillStyle = healthPercent > 0.5 ? '#00ff00' : healthPercent > 0.25 ? '#ffff00' : '#ff0000';
-      ctx.fillRect(healthBarX, healthBarY, healthBarWidth * healthPercent, healthBarHeight);
-
-      // Health text
-      ctx.font = '12px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#fff';
-      ctx.fillText(`${Math.floor(this.player.health)} / ${this.player.maxHealth}`, healthBarX + healthBarWidth / 2, healthBarY + healthBarHeight / 2 + 4);
+      ctx.fillRect(barStartX, healthBarY, barWidth * healthPercent, barHeight);
 
       // Stamina bar
-      ctx.textAlign = 'left';
-      ctx.font = '16px Arial';
-      ctx.fillStyle = '#fff';
-      ctx.fillText('Stamina', panelX + 10, panelY + 110);
+      ctx.fillText('STA', barLabelX, panelY + 72 * scale);
 
-      const staminaBarX = panelX + 75;
-      const staminaBarY = panelY + 95;
-      const staminaBarWidth = panelWidth - 85;
-      const staminaBarHeight = 20;
-
+      const staminaBarY = panelY + 62 * scale;
       ctx.fillStyle = '#333';
-      ctx.fillRect(staminaBarX, staminaBarY, staminaBarWidth, staminaBarHeight);
+      ctx.fillRect(barStartX, staminaBarY, barWidth, barHeight);
 
       const staminaPercent = this.player.stats.stamina / this.player.stats.maxStamina;
       ctx.fillStyle = '#00aaff';
-      ctx.fillRect(staminaBarX, staminaBarY, staminaBarWidth * staminaPercent, staminaBarHeight);
-
-      // Stamina text
-      ctx.font = '12px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText(`${Math.floor(this.player.stats.stamina)} / ${this.player.stats.maxStamina}`, staminaBarX + staminaBarWidth / 2, staminaBarY + staminaBarHeight / 2 + 4);
+      ctx.fillRect(barStartX, staminaBarY, barWidth * staminaPercent, barHeight);
 
       // Loot carried indicator
-      ctx.font = '16px Arial';
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#fff';
-      ctx.fillText(`Loot: ${this.player.carriedLoot.length} / ${this.player.stats.carrySlots}`, panelX + 10, panelY + 135);
+      ctx.font = `${Math.floor(12 * scale)}px Arial`;
+      ctx.fillText(`Loot: ${this.player.carriedLoot.length}/${this.player.stats.carrySlots}`, barLabelX, panelY + 90 * scale);
     }
-    
+
     ctx.restore();
   }
   
