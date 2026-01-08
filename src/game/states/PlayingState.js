@@ -435,6 +435,9 @@ export class PlayingState extends State {
     // Update player
     if (this.player) {
       this.player.update(deltaTime);
+
+      // Camera follows player every frame
+      this.game.camera.follow(this.player);
     }
     
     // Update traphouses
