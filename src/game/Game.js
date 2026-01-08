@@ -109,6 +109,11 @@ export class Game {
         opp2Walk: `/sprites/opp2_walk.png${cacheBuster}`,
         opp3Stand: `/sprites/opp3_stand.png${cacheBuster}`,
         opp3Walk: `/sprites/opp3_walk.png${cacheBuster}`,
+        // Top Boy sprites
+        topboyStand: `/sprites/topboy_stand.png${cacheBuster}`,
+        topboyShoot: `/sprites/topboy_shoot.png${cacheBuster}`,
+        topboyShootDown: `/sprites/topboy_shoot_down.png${cacheBuster}`,
+        topboyShootUp: `/sprites/topboy_shoot_up.png${cacheBuster}`,
         // Building sprite (replaces shelf)
         building: `/sprites/building.png${cacheBuster}`
       }

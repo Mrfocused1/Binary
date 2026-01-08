@@ -45,6 +45,20 @@ export const UPGRADES = {
     getDescription: (level) => `Beef -50%`
   },
 
+  // Bulletproof vest - 50% damage reduction, one at a time
+  bulletproofVest: {
+    id: 'bulletproofVest',
+    name: 'Bulletproof Vest',
+    description: 'Absorbs 50% of bullet damage until destroyed',
+    icon: '🦺',
+    maxLevel: 1, // Can only have one at a time
+    requiresNoVest: true, // Special flag - only show if player has no vest
+    effect: (player, level) => {
+      player.equipVest();
+    },
+    getDescription: (level) => `50% damage reduction (100 HP vest)`
+  },
+
   // Future weapon skills (not implemented yet)
   intimidate: {
     id: 'intimidate',
@@ -61,12 +75,15 @@ export const UPGRADES = {
 };
 
 // Helper function to get random upgrades
-export function getRandomUpgrades(count = 3, playerUpgrades = {}, includeBeefOptions = false) {
+export function getRandomUpgrades(count = 3, playerUpgrades = {}, includeBeefOptions = false, player = null) {
   const availableUpgrades = Object.values(UPGRADES).filter(upgrade => {
     // Filter out weapons
     if (upgrade.isWeapon) return false;
     // Filter out beef-only options unless requested
     if (upgrade.isBeefOption && !includeBeefOptions) return false;
+
+    // Filter out vest upgrade if player already has a vest
+    if (upgrade.requiresNoVest && player && player.hasVest) return false;
 
     // Check if upgrade is maxed out
     const currentLevel = playerUpgrades[upgrade.id] || 0;
@@ -79,18 +96,18 @@ export function getRandomUpgrades(count = 3, playerUpgrades = {}, includeBeefOpt
 }
 
 // Get upgrades for beef situation (includes Slew Dem if not at max allies)
-export function getBeefUpgrades(count = 3, playerUpgrades = {}, currentAllyCount = 0) {
+export function getBeefUpgrades(count = 3, playerUpgrades = {}, currentAllyCount = 0, player = null) {
   const maxAllies = 3;
   const canSpawnMoreAllies = currentAllyCount < maxAllies;
 
   if (canSpawnMoreAllies) {
     // Include Slew Dem option
-    const upgrades = getRandomUpgrades(count - 1, playerUpgrades, false);
+    const upgrades = getRandomUpgrades(count - 1, playerUpgrades, false, player);
     upgrades.unshift(UPGRADES.slewDem); // Put Slew Dem first
     return upgrades.slice(0, count);
   } else {
     // At max allies - don't show Slew Dem
-    return getRandomUpgrades(count, playerUpgrades, false);
+    return getRandomUpgrades(count, playerUpgrades, false, player);
   }
 }
 

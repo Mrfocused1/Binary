@@ -729,6 +729,24 @@ export class Opp extends Entity {
       if (!sprite) {
         sprite = this.game.assetLoader.getImage('chronikStand');
       }
+    } else if (this.isTopBoy) {
+      // Top Boy uses special sprites with directional shooting
+      if (this.isShooting && this.shootingDirection) {
+        if (this.shootingDirection === 'down') {
+          sprite = this.game.assetLoader.getImage('topboyShootDown');
+        } else if (this.shootingDirection === 'up') {
+          sprite = this.game.assetLoader.getImage('topboyShootUp');
+        } else {
+          // Left/right use the side shooting sprite (flipped as needed)
+          sprite = this.game.assetLoader.getImage('topboyShoot');
+        }
+      } else {
+        sprite = this.game.assetLoader.getImage('topboyStand');
+      }
+      // Fallback to opp2 if topboy sprites don't load
+      if (!sprite) {
+        sprite = this.game.assetLoader.getImage('opp2Stand');
+      }
     } else {
       // Regular opps use opp sprites
       const spritePrefix = `opp${this.spriteType}`;
@@ -1266,6 +1284,7 @@ export class Opp extends Entity {
     let direction;
     if (Math.abs(dx) > Math.abs(dy)) {
       direction = dx > 0 ? 'right' : 'left';
+      this.facing = dx > 0 ? 'right' : 'left'; // Face target
     } else {
       direction = dy > 0 ? 'down' : 'up';
     }
@@ -1273,6 +1292,16 @@ export class Opp extends Entity {
     // Store reference for setTimeout
     const game = this.game;
     const opp = this;
+
+    // Start shooting animation and store direction
+    this.isShooting = true;
+    this.shootingDirection = direction;
+
+    // Clear shooting animation after burst completes
+    setTimeout(() => {
+      opp.isShooting = false;
+      opp.shootingDirection = null;
+    }, 400); // 400ms for full burst
 
     // Fire first shot immediately
     const firstProjectile = new Projectile(

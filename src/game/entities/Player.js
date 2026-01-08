@@ -22,7 +22,13 @@ export class Player extends Entity {
     this.health = 100;
     this.maxHealth = 100;
     this.isDead = false;
-    
+
+    // Bulletproof vest system
+    this.hasVest = false;
+    this.vestHealth = 0;
+    this.maxVestHealth = 100;
+    this.vestDamageReduction = 0.5; // 50% damage reduction
+
     // Upgrade tracking
     this.upgradeLevels = {};
     
@@ -398,11 +404,37 @@ export class Player extends Entity {
   takeDamage(amount) {
     if (this.isDead) return;
 
-    this.health -= amount;
+    let actualDamage = amount;
+
+    // If wearing vest, reduce damage and absorb with vest
+    if (this.hasVest && this.vestHealth > 0) {
+      // Vest absorbs 50% of damage
+      const vestAbsorb = amount * this.vestDamageReduction;
+      actualDamage = amount - vestAbsorb;
+
+      // Damage the vest
+      this.vestHealth -= vestAbsorb;
+
+      // Check if vest is destroyed
+      if (this.vestHealth <= 0) {
+        this.vestHealth = 0;
+        this.hasVest = false;
+        this.vestBroken = true; // Flag for UI notification
+      }
+    }
+
+    this.health -= actualDamage;
     if (this.health <= 0) {
       this.health = 0;
       this.isDead = true;
     }
+  }
+
+  // Equip a new bulletproof vest
+  equipVest() {
+    this.hasVest = true;
+    this.vestHealth = this.maxVestHealth;
+    this.vestBroken = false;
   }
 
   pickupLoot(item) {

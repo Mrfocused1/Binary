@@ -31,6 +31,7 @@ export class PlayingState extends State {
     // Add small buffer: 100 pixels on each side
     this.worldWidth = 1344; // Match background tile width
     this.worldHeight = 1152; // 1.5x background tile height (768 * 1.5)
+    this.unlockedWorldWidth = 1344; // Camera bounds - only unlock new areas after level progression
     
     // Opp spawning
     this.oppSpawnTimer = 0;
@@ -170,6 +171,13 @@ export class PlayingState extends State {
       duration: 3
     };
 
+    // Pending upgrades system - upgrades queue up and player opens menu with ESC
+    this.pendingUpgrades = {
+      count: 0,
+      isBeefSituation: false, // Track if any pending upgrade is beef-related
+      flashTimer: 0 // For flashing indicator
+    };
+
     // Mobile controls overlay
     this.mobileControls = new MobileControls(this.game.inputManager, this.game.canvas);
 
@@ -288,8 +296,8 @@ export class PlayingState extends State {
       500   // Between building rows
     );
     
-    // Set camera bounds to world
-    this.game.camera.setBounds(0, 0, this.worldWidth, this.worldHeight);
+    // Set camera bounds to unlocked area only (not full world)
+    this.game.camera.setBounds(0, 0, this.unlockedWorldWidth, this.worldHeight);
     
     // Center camera on player
     this.game.camera.follow(this.player);
@@ -318,11 +326,65 @@ export class PlayingState extends State {
       input.ensureFocus();
     }
     
-    // Handle pause
-    if (input.isKeyPressed('p') || input.isKeyPressed('Escape')) {
-      // Pause music when pausing game
+    // Check for tap on pending upgrades indicator (mobile support)
+    if (this.pendingUpgrades.count > 0) {
+      const mousePos = input.getMousePosition();
+      const { width } = this.game;
+      // Indicator bounds: x = width - 160 to width - 10, y = 100 to 145
+      const indicatorBounds = {
+        x: width - 160,
+        y: 100,
+        width: 150,
+        height: 45
+      };
+
+      if (mousePos && input.isMouseButtonPressed(0)) {
+        if (mousePos.x >= indicatorBounds.x && mousePos.x <= indicatorBounds.x + indicatorBounds.width &&
+            mousePos.y >= indicatorBounds.y && mousePos.y <= indicatorBounds.y + indicatorBounds.height) {
+          // Tapped on upgrade indicator - open upgrade menu
+          this.pendingUpgrades.count--;
+          const isBeef = this.pendingUpgrades.isBeefSituation;
+          if (this.pendingUpgrades.count === 0) {
+            this.pendingUpgrades.isBeefSituation = false;
+          }
+          this.game.stateManager.pushState('upgradeSelection', { isBeefSituation: isBeef });
+          return;
+        }
+      }
+    }
+
+    // Handle ESC - open upgrade menu if upgrades pending, otherwise pause
+    if (input.isKeyPressed('Escape')) {
+      if (this.pendingUpgrades.count > 0) {
+        // Open upgrade selection menu
+        this.pendingUpgrades.count--;
+        const isBeef = this.pendingUpgrades.isBeefSituation;
+        // Reset beef flag if no more pending
+        if (this.pendingUpgrades.count === 0) {
+          this.pendingUpgrades.isBeefSituation = false;
+        }
+        this.game.stateManager.pushState('upgradeSelection', { isBeefSituation: isBeef });
+        return;
+      } else {
+        // No pending upgrades - normal pause
+        if (this.bgMusic) {
+          this.bgMusic.pause();
+        }
+        if (this.beefMusic) {
+          this.beefMusic.pause();
+        }
+        this.game.stateManager.pushState('paused');
+        return;
+      }
+    }
+
+    // Handle P for pause only (no upgrade check)
+    if (input.isKeyPressed('p')) {
       if (this.bgMusic) {
         this.bgMusic.pause();
+      }
+      if (this.beefMusic) {
+        this.beefMusic.pause();
       }
       this.game.stateManager.pushState('paused');
       return;
@@ -757,12 +819,41 @@ export class PlayingState extends State {
     ctx.font = '18px Arial';
     ctx.fillStyle = '#fff';
     ctx.fillText(`Opps: ${this.opps.length}/${this.maxOpps}`, width - 65, 82);
-    
+
+    // Pending upgrades indicator (top right, below opp counter)
+    if (this.pendingUpgrades.count > 0) {
+      // Update flash timer
+      this.pendingUpgrades.flashTimer += 0.05;
+
+      // Flashing background
+      const flashAlpha = 0.7 + Math.sin(this.pendingUpgrades.flashTimer * 8) * 0.3;
+      const bgColor = this.pendingUpgrades.isBeefSituation ?
+        `rgba(255, 50, 50, ${flashAlpha})` : `rgba(50, 200, 50, ${flashAlpha})`;
+
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(width - 160, 100, 150, 45);
+
+      // Border
+      ctx.strokeStyle = this.pendingUpgrades.isBeefSituation ? '#ff0000' : '#00ff00';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(width - 160, 100, 150, 45);
+
+      // Text
+      ctx.font = 'bold 14px Arial';
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${this.pendingUpgrades.count} UPGRADE${this.pendingUpgrades.count > 1 ? 'S' : ''}`, width - 85, 118);
+      ctx.font = '12px Arial';
+      // Show different text for mobile vs desktop
+      const isMobile = this.game.inputManager.isMobile;
+      ctx.fillText(isMobile ? 'TAP to choose' : 'Press ESC to choose', width - 85, 135);
+    }
+
     // Left Side Panel - Player Stats
     const panelX = 10;
     const panelY = 10;
     const panelWidth = 250;
-    const panelHeight = 175; // Height to fit health, stamina, and loot
+    const panelHeight = 205; // Height to fit health, vest, stamina, and loot
     
     // Panel background
     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
@@ -818,14 +909,46 @@ export class PlayingState extends State {
       ctx.fillStyle = '#fff';
       ctx.fillText(`${Math.floor(this.player.health)} / ${this.player.maxHealth}`, healthBarX + healthBarWidth / 2, healthBarY + healthBarHeight / 2 + 4);
 
-      // Stamina bar
+      // Vest bar (only show if player has vest)
+      if (this.player.hasVest) {
+        ctx.textAlign = 'left';
+        ctx.font = '16px Arial';
+        ctx.fillStyle = '#fff';
+        ctx.fillText('Vest', panelX + 10, panelY + 110);
+
+        const vestBarX = panelX + 75;
+        const vestBarY = panelY + 95;
+        const vestBarWidth = panelWidth - 85;
+        const vestBarHeight = 20;
+
+        ctx.fillStyle = '#333';
+        ctx.fillRect(vestBarX, vestBarY, vestBarWidth, vestBarHeight);
+
+        const vestPercent = this.player.vestHealth / this.player.maxVestHealth;
+        ctx.fillStyle = '#8844ff'; // Purple for vest
+        ctx.fillRect(vestBarX, vestBarY, vestBarWidth * vestPercent, vestBarHeight);
+
+        // Vest text
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${Math.floor(this.player.vestHealth)} / ${this.player.maxVestHealth}`, vestBarX + vestBarWidth / 2, vestBarY + vestBarHeight / 2 + 4);
+      }
+
+      // Check if vest just broke - show notification
+      if (this.player.vestBroken) {
+        this.showAlert('🦺 VEST DESTROYED! 🦺');
+        this.player.vestBroken = false;
+      }
+
+      // Stamina bar (shifted down if vest exists)
+      const staminaYOffset = this.player.hasVest ? 30 : 0;
       ctx.textAlign = 'left';
       ctx.font = '16px Arial';
       ctx.fillStyle = '#fff';
-      ctx.fillText('Stamina', panelX + 10, panelY + 110);
+      ctx.fillText('Stamina', panelX + 10, panelY + 110 + staminaYOffset);
 
       const staminaBarX = panelX + 75;
-      const staminaBarY = panelY + 95;
+      const staminaBarY = panelY + 95 + staminaYOffset;
       const staminaBarWidth = panelWidth - 85;
       const staminaBarHeight = 20;
 
@@ -841,11 +964,11 @@ export class PlayingState extends State {
       ctx.textAlign = 'center';
       ctx.fillText(`${Math.floor(this.player.stats.stamina)} / ${this.player.stats.maxStamina}`, staminaBarX + staminaBarWidth / 2, staminaBarY + staminaBarHeight / 2 + 4);
 
-      // Loot carried indicator
+      // Loot carried indicator (shifted down if vest exists)
       ctx.font = '16px Arial';
       ctx.textAlign = 'left';
       ctx.fillStyle = '#fff';
-      ctx.fillText(`Loot: ${this.player.carriedLoot.length} / ${this.player.stats.carrySlots}`, panelX + 10, panelY + 135);
+      ctx.fillText(`Loot: ${this.player.carriedLoot.length} / ${this.player.stats.carrySlots}`, panelX + 10, panelY + 135 + staminaYOffset);
     }
     
     ctx.restore();
@@ -1362,8 +1485,13 @@ export class PlayingState extends State {
         }
 
         ally.isMoving = true;
-        ally.x += ally.vx * deltaTime;
-        ally.y += ally.vy * deltaTime;
+
+        // Calculate new position with collision checking
+        const newX = ally.x + ally.vx * deltaTime;
+        const newY = ally.y + ally.vy * deltaTime;
+        const finalPos = this.checkAllyBuildingCollision(ally, newX, newY);
+        ally.x = finalPos.x;
+        ally.y = finalPos.y;
 
         if (Math.abs(ally.vx) > 0.1) {
           ally.facing = ally.vx > 0 ? 'right' : 'left';
@@ -1382,8 +1510,14 @@ export class PlayingState extends State {
             ally.vx = Math.cos(ally.direction) * ally.speed * 0.6;
             ally.vy = Math.sin(ally.direction) * ally.speed * 0.6;
             ally.isMoving = true;
-            ally.x += ally.vx * deltaTime;
-            ally.y += ally.vy * deltaTime;
+
+            // Calculate new position with collision checking
+            const followNewX = ally.x + ally.vx * deltaTime;
+            const followNewY = ally.y + ally.vy * deltaTime;
+            const followFinalPos = this.checkAllyBuildingCollision(ally, followNewX, followNewY);
+            ally.x = followFinalPos.x;
+            ally.y = followFinalPos.y;
+
             if (Math.abs(ally.vx) > 0.1) {
               ally.facing = ally.vx > 0 ? 'right' : 'left';
             }
@@ -1426,6 +1560,50 @@ export class PlayingState extends State {
 
     // Remove dead allies
     this.allies = this.allies.filter(a => !a.isDead);
+  }
+
+  // Check ally collision with buildings and return valid position
+  checkAllyBuildingCollision(ally, newX, newY) {
+    // Get all buildings (traphouses + safe house)
+    const buildings = [...this.traphouses];
+    if (this.safeHouse) buildings.push(this.safeHouse);
+
+    let canMoveX = true;
+    let canMoveY = true;
+
+    for (const building of buildings) {
+      // Quick bounds check - skip buildings that are far away
+      if (Math.abs(building.x - ally.x) > 150 || Math.abs(building.y - ally.y) > 150) {
+        continue;
+      }
+
+      // Get building collision box
+      const bx = building.x + (building.collisionBox?.offsetX || 0);
+      const by = building.y + (building.collisionBox?.offsetY || 0);
+      const bw = building.collisionBox?.width || building.width;
+      const bh = building.collisionBox?.height || building.height;
+
+      // Check X movement collision
+      if (canMoveX) {
+        const wouldCollideX = newX < bx + bw && newX + ally.width > bx &&
+                              ally.y < by + bh && ally.y + ally.height > by;
+        if (wouldCollideX) canMoveX = false;
+      }
+
+      // Check Y movement collision
+      if (canMoveY) {
+        const wouldCollideY = ally.x < bx + bw && ally.x + ally.width > bx &&
+                              newY < by + bh && newY + ally.height > by;
+        if (wouldCollideY) canMoveY = false;
+      }
+
+      if (!canMoveX && !canMoveY) break;
+    }
+
+    return {
+      x: canMoveX ? newX : ally.x,
+      y: canMoveY ? newY : ally.y
+    };
   }
 
   isPlayerNearBuilding(building, distance) {
@@ -1578,9 +1756,9 @@ export class PlayingState extends State {
         // Play stash sound
         this.playShelfSound();
 
-        // Trigger upgrade selection every 5 stashes
+        // Queue upgrade every 5 stashes (player opens with ESC)
         if (this.game.gameData.lootStashed % 5 === 0) {
-          this.game.stateManager.pushState('upgradeSelection', { isBeefSituation: false });
+          this.pendingUpgrades.count++;
         }
       }
     }
@@ -1653,8 +1831,9 @@ export class PlayingState extends State {
       // 5. Make all opps (including Opp Block guards) scatter and surround player
       this.scatterAllOpps();
 
-      // Show upgrade selection
-      this.game.stateManager.pushState('upgradeSelection', { isBeefSituation: true });
+      // Queue upgrade (beef situation) - player opens with ESC
+      this.pendingUpgrades.count++;
+      this.pendingUpgrades.isBeefSituation = true;
     }
 
     // Reset flag when beef drops below 40% (so it can trigger again)
@@ -1804,9 +1983,11 @@ export class PlayingState extends State {
     // Expand world bounds to the right
     this.worldWidth += expansionWidth;
 
-    // CRITICAL: Update camera bounds to match new world size
-    // Without this, camera stays locked to original bounds
-    this.game.camera.setBounds(0, 0, this.worldWidth, this.worldHeight);
+    // Unlock the new area for camera navigation
+    this.unlockedWorldWidth = this.worldWidth;
+
+    // Update camera bounds to match newly unlocked area
+    this.game.camera.setBounds(0, 0, this.unlockedWorldWidth, this.worldHeight);
 
     // Generate new content in the expanded area
     this.generateNewLevelContent(oldWorldWidth, expansionWidth);
@@ -1820,7 +2001,7 @@ export class PlayingState extends State {
     this.game.gameData.beefLevel = Math.max(0, this.game.gameData.beefLevel - 30);
     this.beefUpgradeShown = false;
 
-    console.log(`[LEVEL] World expanded to ${this.worldWidth}x${this.worldHeight}, camera bounds updated`);
+    console.log(`[LEVEL] World expanded to ${this.worldWidth}x${this.worldHeight}, camera unlocked to ${this.unlockedWorldWidth}`);
   }
 
   // Generate new traphouses, Opp Block, and content in expanded area
@@ -2141,6 +2322,12 @@ export class PlayingState extends State {
           // Damage the player
           this.player.takeDamage(projectile.damage);
 
+          // Apply knockback to player (stronger push)
+          const knockbackForce = 250;
+          const dir = projectile.getDirectionVector();
+          this.player.x += dir.x * knockbackForce * 0.016; // Instant push
+          this.player.y += dir.y * knockbackForce * 0.016;
+
           // Provoke all allies when player is hit!
           this.provokeAllAllies();
 
@@ -2163,14 +2350,16 @@ export class PlayingState extends State {
             // Damage the ally
             ally.takeDamage(projectile.damage);
 
+            // Apply knockback to ally (instant push)
+            const knockbackForce = 80;
+            const dir = projectile.getDirectionVector();
+            ally.x += dir.x * knockbackForce * 0.016;
+            ally.y += dir.y * knockbackForce * 0.016;
+
             // Provoke this ally and others when hit!
             ally.isProvoked = true;
             ally.provokedTimer = 10;
             this.provokeAllAllies();
-
-            // Apply knockback - but handle it manually since we don't call ally.update()
-            ally.vx += projectile.getDirectionVector().x * 100;
-            ally.vy += projectile.getDirectionVector().y * 100;
 
             // Deactivate projectile
             projectile.hit();
