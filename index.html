@@ -10,7 +10,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#000000">
-  <title>Bine % Chalk</title>
+  <!-- PWA Manifest for fullscreen support -->
+  <link rel="manifest" href="/manifest.json">
+  <title>Bine & Chalk</title>
   <style>
     * {
       margin: 0;
@@ -19,41 +21,47 @@
     }
 
     html {
-      /* Make page slightly taller to enable URL bar hiding on scroll */
       height: 100%;
       overflow: hidden;
+      background-color: #000;
     }
 
     body {
-      /* Use dynamic viewport height to adapt to URL bar visibility */
+      /* Use all viewport height variants for maximum compatibility */
       min-height: 100vh;
-      min-height: 100dvh; /* Dynamic viewport height - shrinks when URL bar shows */
+      min-height: 100dvh;
+      min-height: -webkit-fill-available;
       height: 100%;
       overflow: hidden;
-      /* Prevent scrolling and zooming on mobile */
       touch-action: none;
-      /* Prevent text selection */
       -webkit-user-select: none;
       -moz-user-select: none;
       -ms-user-select: none;
       user-select: none;
-      /* Prevent touch callout (iOS) */
       -webkit-touch-callout: none;
       background-color: #000;
       display: flex;
       justify-content: center;
       align-items: center;
       font-family: 'Arial', sans-serif;
+      /* Handle safe areas (notches, status bars) */
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     }
 
     #game-container {
-      position: relative;
-      box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
       width: 100%;
       height: 100%;
       display: flex;
       justify-content: center;
       align-items: center;
+      background-color: #000;
+      /* Extend into safe areas */
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     }
 
     #game-canvas {
@@ -62,11 +70,10 @@
       image-rendering: pixelated;
       image-rendering: -moz-crisp-edges;
       image-rendering: crisp-edges;
-      /* Prevent default touch behavior on canvas */
       touch-action: none;
       -webkit-tap-highlight-color: transparent;
-      /* Scale to fit screen width, maintain aspect ratio */
-      width: 100vw;
+      /* Default: constrained size for desktop */
+      width: 100%;
       max-width: 1280px;
       height: auto;
       aspect-ratio: 1280 / 720;
@@ -84,6 +91,62 @@
 
     .hidden {
       display: none !important;
+    }
+
+    /* Fullscreen prompt overlay for mobile */
+    #fullscreen-prompt {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.9);
+      z-index: 10000;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: #fff;
+      text-align: center;
+      padding: 20px;
+      cursor: pointer;
+    }
+
+    #fullscreen-prompt .prompt-icon {
+      font-size: 60px;
+      margin-bottom: 20px;
+    }
+
+    #fullscreen-prompt .prompt-text {
+      font-size: 22px;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+
+    #fullscreen-prompt .prompt-subtext {
+      font-size: 14px;
+      opacity: 0.7;
+      margin-bottom: 20px;
+    }
+
+    #fullscreen-prompt .prompt-button {
+      background: linear-gradient(180deg, #4CAF50, #388E3C);
+      color: white;
+      border: none;
+      padding: 15px 40px;
+      font-size: 18px;
+      font-weight: bold;
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);
+    }
+
+    #fullscreen-prompt .skip-link {
+      margin-top: 20px;
+      font-size: 12px;
+      opacity: 0.5;
+      text-decoration: underline;
+      cursor: pointer;
     }
 
     /* Rotate device overlay - shown in portrait mode on mobile */
@@ -135,40 +198,107 @@
       }
 
       #game-container {
-        /* Hide game in portrait - show rotate message instead */
         opacity: 0;
         pointer-events: none;
       }
+
+      #fullscreen-prompt {
+        display: none !important;
+      }
     }
 
-    /* Mobile landscape mode - full screen game */
+    /* Mobile landscape mode - FULL SCREEN game */
     @media screen and (max-width: 900px) and (orientation: landscape) {
-      body {
-        /* Use full viewport in landscape */
+      html, body {
         width: 100vw;
         height: 100vh;
         height: 100dvh;
+        height: -webkit-fill-available;
+        overflow: hidden;
+        padding: 0;
+        margin: 0;
+      }
+
+      body {
+        /* Remove safe area padding in landscape - we want edge to edge */
+        padding: 0;
+      }
+
+      #game-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100vw;
+        height: 100vh;
+        height: 100dvh;
+        height: -webkit-fill-available;
+        padding: 0;
+        margin: 0;
       }
 
       #game-canvas {
-        /* Fill the screen in landscape mode */
-        width: 100vw;
-        height: 100vh;
-        height: 100dvh;
-        max-width: none;
-        object-fit: contain;
+        /* Fill entire screen in mobile landscape */
+        width: 100vw !important;
+        height: 100vh !important;
+        height: 100dvh !important;
+        height: -webkit-fill-available !important;
+        max-width: none !important;
+        max-height: none !important;
+        aspect-ratio: auto !important;
+        object-fit: fill;
       }
     }
 
-    /* Fullscreen mode - hide everything but the game */
-    :fullscreen body,
-    :-webkit-full-screen body,
-    :-moz-full-screen body {
-      background-color: #000;
+    /* When in actual fullscreen mode */
+    :fullscreen #game-container,
+    :-webkit-full-screen #game-container,
+    :-moz-full-screen #game-container {
+      padding: 0;
+    }
+
+    :fullscreen #game-canvas,
+    :-webkit-full-screen #game-canvas,
+    :-moz-full-screen #game-canvas {
+      width: 100vw !important;
+      height: 100vh !important;
+      max-width: none !important;
+      max-height: none !important;
+    }
+
+    /* Hide fullscreen prompt when in fullscreen */
+    :fullscreen #fullscreen-prompt,
+    :-webkit-full-screen #fullscreen-prompt,
+    :-moz-full-screen #fullscreen-prompt {
+      display: none !important;
+    }
+
+    /* Standalone mode (PWA added to home screen) */
+    @media all and (display-mode: standalone) {
+      #fullscreen-prompt {
+        display: none !important;
+      }
+
+      #game-canvas {
+        width: 100vw !important;
+        height: 100vh !important;
+        max-width: none !important;
+        max-height: none !important;
+      }
     }
   </style>
 </head>
 <body>
+  <!-- Fullscreen prompt overlay for mobile -->
+  <div id="fullscreen-prompt">
+    <div class="prompt-icon">🎮</div>
+    <div class="prompt-text">TAP FOR FULLSCREEN</div>
+    <div class="prompt-subtext">Play without the address bar</div>
+    <button class="prompt-button" id="fullscreen-btn">GO FULLSCREEN</button>
+    <div class="skip-link" id="skip-fullscreen">Skip (play with address bar)</div>
+  </div>
+
   <!-- Rotate device overlay for portrait mode -->
   <div id="rotate-overlay">
     <div class="rotate-icon">📱</div>
@@ -178,52 +308,69 @@
 
   <div id="game-container">
     <canvas id="game-canvas"></canvas>
-    <div id="loading">Loading Bine % Chalk...</div>
+    <div id="loading">Loading Bine & Chalk...</div>
   </div>
 
   <script>
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                         window.navigator.standalone === true;
 
     // Check if we're in fullscreen mode
     function isFullscreen() {
-      return !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+      return !!(document.fullscreenElement || document.webkitFullscreenElement ||
+                document.mozFullScreenElement || document.msFullscreenElement);
     }
 
-    // Enter fullscreen mode (works on Android, limited on iOS)
+    // Enter fullscreen mode
     function enterFullscreen() {
       const elem = document.documentElement;
-      const requestFullscreen = elem.requestFullscreen || elem.webkitRequestFullscreen || elem.mozRequestFullScreen || elem.msRequestFullscreen;
+
+      const requestFullscreen = elem.requestFullscreen ||
+                                elem.webkitRequestFullscreen ||
+                                elem.mozRequestFullScreen ||
+                                elem.msRequestFullscreen;
 
       if (requestFullscreen) {
-        requestFullscreen.call(elem).then(() => {
-          lockLandscape();
-        }).catch(() => {
-          // Fullscreen failed - use scroll trick for iOS
-          hideURLBarWithScroll();
-        });
-      } else {
-        // No fullscreen API - use scroll trick
+        requestFullscreen.call(elem, { navigationUI: 'hide' })
+          .then(() => {
+            hideFullscreenPrompt();
+            lockLandscape();
+          })
+          .catch((err) => {
+            console.log('Fullscreen request failed:', err);
+            // On iOS, try the scroll trick instead
+            if (isIOS) {
+              hideURLBarWithScroll();
+              hideFullscreenPrompt();
+            }
+          });
+      } else if (isIOS) {
+        // iOS doesn't support fullscreen API well - use scroll trick
         hideURLBarWithScroll();
+        hideFullscreenPrompt();
       }
     }
 
-    // iOS scroll trick to hide URL bar
+    // iOS scroll trick to minimize URL bar
     function hideURLBarWithScroll() {
       if (!isMobile) return;
 
-      // Temporarily allow scrolling
-      document.body.style.height = '100.1vh';
+      // Set height slightly larger to enable scroll
+      document.body.style.height = 'calc(100vh + 1px)';
       document.body.style.overflow = 'auto';
 
-      // Scroll to hide URL bar
+      // Scroll down to hide URL bar
       setTimeout(() => {
         window.scrollTo(0, 1);
 
-        // Restore scroll lock after scroll
+        // Restore after scroll
         setTimeout(() => {
           document.body.style.height = '100dvh';
           document.body.style.overflow = 'hidden';
+          window.scrollTo(0, 0);
         }, 100);
       }, 50);
     }
@@ -232,52 +379,115 @@
     function lockLandscape() {
       if (!isMobile) return;
 
-      // Try to lock orientation using Screen Orientation API
       if (screen.orientation && screen.orientation.lock) {
         screen.orientation.lock('landscape').catch(() => {
-          // Orientation lock failed - this is normal on iOS and some browsers
+          // Orientation lock failed - normal on iOS
         });
+      }
+    }
+
+    // Show fullscreen prompt
+    function showFullscreenPrompt() {
+      const prompt = document.getElementById('fullscreen-prompt');
+      if (prompt && isMobile && !isStandalone && !isFullscreen()) {
+        prompt.style.display = 'flex';
+      }
+    }
+
+    // Hide fullscreen prompt
+    function hideFullscreenPrompt() {
+      const prompt = document.getElementById('fullscreen-prompt');
+      if (prompt) {
+        prompt.style.display = 'none';
       }
     }
 
     // Initialize on DOM ready
     document.addEventListener('DOMContentLoaded', () => {
-      if (isMobile) {
+      const fullscreenBtn = document.getElementById('fullscreen-btn');
+      const skipBtn = document.getElementById('skip-fullscreen');
+      const fullscreenPrompt = document.getElementById('fullscreen-prompt');
+
+      if (isMobile && !isStandalone) {
+        // Show fullscreen prompt after a short delay
+        setTimeout(showFullscreenPrompt, 500);
+
+        // Fullscreen button click
+        if (fullscreenBtn) {
+          fullscreenBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            enterFullscreen();
+          });
+
+          fullscreenBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            enterFullscreen();
+          });
+        }
+
+        // Skip button
+        if (skipBtn) {
+          skipBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            hideFullscreenPrompt();
+            hideURLBarWithScroll();
+          });
+
+          skipBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            hideFullscreenPrompt();
+            hideURLBarWithScroll();
+          });
+        }
+
+        // Tap anywhere on prompt to go fullscreen
+        if (fullscreenPrompt) {
+          fullscreenPrompt.addEventListener('click', (e) => {
+            if (e.target === fullscreenPrompt) {
+              enterFullscreen();
+            }
+          });
+        }
+
+        // Lock landscape
         lockLandscape();
+      } else {
+        // Desktop or standalone mode - hide prompt
+        hideFullscreenPrompt();
+      }
+    });
 
-        // Try to hide URL bar on first interaction
-        let hasTriedFullscreen = false;
-        const tryFullscreenOnce = () => {
-          if (hasTriedFullscreen) return;
-          hasTriedFullscreen = true;
-          enterFullscreen();
-          document.removeEventListener('touchstart', tryFullscreenOnce);
-          document.removeEventListener('click', tryFullscreenOnce);
-        };
-
-        document.addEventListener('touchstart', tryFullscreenOnce, { once: true });
-        document.addEventListener('click', tryFullscreenOnce, { once: true });
-
-        // Also try scroll trick on load (works on some browsers)
-        setTimeout(hideURLBarWithScroll, 500);
+    // Handle fullscreen change
+    document.addEventListener('fullscreenchange', () => {
+      if (isFullscreen()) {
+        hideFullscreenPrompt();
+      }
+    });
+    document.addEventListener('webkitfullscreenchange', () => {
+      if (isFullscreen()) {
+        hideFullscreenPrompt();
       }
     });
 
     // Re-hide URL bar on orientation change
     window.addEventListener('orientationchange', () => {
       setTimeout(() => {
-        if (isMobile && !isFullscreen()) {
+        if (isMobile && !isFullscreen() && !isStandalone) {
           hideURLBarWithScroll();
         }
       }, 300);
     });
 
-    // Handle resize (URL bar appearing/disappearing)
+    // Handle resize
     window.addEventListener('resize', () => {
-      // Resize canvas to match new viewport
       if (isMobile) {
         const canvas = document.getElementById('game-canvas');
         if (canvas) {
+          // Force recalculation of canvas size
           canvas.style.height = '100dvh';
         }
       }
