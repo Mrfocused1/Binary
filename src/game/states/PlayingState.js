@@ -31,12 +31,13 @@ export class PlayingState extends State {
     // Add small buffer: 100 pixels on each side
     this.worldWidth = 1344; // Match background tile width
     this.worldHeight = 1152; // 1.5x background tile height (768 * 1.5)
+    this.unlockedWorldWidth = 1280; // Start with camera width - section 2 unlocks after defeating Top Boy
     
     // Opp spawning
     this.oppSpawnTimer = 0;
-    this.oppSpawnInterval = 15; // Constant 15 seconds between spawns
+    this.oppSpawnInterval = 8; // Seconds between spawns
     this.maxOpps = 10; // Starting max, will increase with waves
-    this.lastMaxOpps = 3; // Track previous max to detect increases
+    this.lastMaxOpps = 5; // Track previous max to detect increases
     
     // Wave notification
     this.maxOppsIncreaseNotification = {
@@ -52,7 +53,9 @@ export class PlayingState extends State {
     
     // Background music
     this.bgMusic = null;
+    this.beefMusic = null;
     this.musicLoaded = false;
+    this.isBeefMusicPlaying = false;
     
     // Sound effects
     this.pickupSounds = []; // Array of audio elements for overlapping sounds
@@ -124,7 +127,7 @@ export class PlayingState extends State {
       // Stats tracking
       lootCollected: 0,
       lootStashed: 0,
-      oppsRepelled: 0
+      bodiesDropped: 0
     };
 
     // Grace period - no auto-pickup for first 1 second
@@ -142,6 +145,38 @@ export class PlayingState extends State {
 
     // Opp Block guard respawn queue (they multiply after death)
     this.oppBlockRespawnQueue = [];
+
+    // Beef-triggered opp spawn queue (gradual spawning from Opp Block)
+    this.beefOppSpawnQueue = {
+      count: 0,
+      timer: 0,
+      interval: 0.8 // Spawn one opp every 0.8 seconds
+    };
+
+    // Top Boy (special boss opp)
+    this.topBoy = null;
+    this.topBoySpawned = false;
+    this.topBoyDefeated = false;
+
+    // Level progression system
+    this.currentLevel = 1;
+    this.levelExpansionDirection = 'right'; // Expand from Opp Block direction
+    this.levelTransitioning = false;
+
+    // Alert notification system
+    this.alertNotification = {
+      active: false,
+      text: '',
+      timer: 0,
+      duration: 3
+    };
+
+    // Pending upgrades system - upgrades queue up and player opens menu with ESC
+    this.pendingUpgrades = {
+      count: 0,
+      isBeefSituation: false, // Track if any pending upgrade is beef-related
+      flashTimer: 0 // For flashing indicator
+    };
 
     // Mobile controls overlay
     this.mobileControls = new MobileControls(this.game.inputManager, this.game.canvas);
@@ -178,18 +213,27 @@ export class PlayingState extends State {
       this.bgMusic = new Audio('/game_music.mp3');
       this.bgMusic.loop = true;
       this.bgMusic.volume = 0.4; // Slightly lower volume for gameplay
-      
+
       this.bgMusic.addEventListener('loadeddata', () => {
         this.musicLoaded = true;
         this.bgMusic.play().catch(e => console.log('Game music play failed:', e));
       });
-      
+
       this.bgMusic.load();
     } else {
       // Resume if returning to game
       this.bgMusic.play().catch(e => console.log('Game music play failed:', e));
     }
-    
+
+    // Initialize beef music
+    if (!this.beefMusic) {
+      this.beefMusic = new Audio('/beef music.mp3');
+      this.beefMusic.loop = true;
+      this.beefMusic.volume = 0.5;
+      this.beefMusic.load();
+    }
+    this.isBeefMusicPlaying = false;
+
     // Initialize sound effects
     if (this.pickupSounds.length === 0) {
       // Create 5 audio instances for overlapping pickup sounds
@@ -217,9 +261,9 @@ export class PlayingState extends State {
 
     // Reset opp spawning variables to initial state
     this.maxOpps = 10;
-    this.lastMaxOpps = 10;
+    this.lastMaxOpps = 5;
     this.oppSpawnTimer = 0;
-    this.oppSpawnInterval = 15;
+    this.oppSpawnInterval = 8;
 
     // Reset wave notification
     this.maxOppsIncreaseNotification = {
@@ -233,7 +277,11 @@ export class PlayingState extends State {
     if (this.bgMusic) {
       this.bgMusic.pause();
     }
-    
+    if (this.beefMusic) {
+      this.beefMusic.pause();
+    }
+    this.isBeefMusicPlaying = false;
+
     // Stop player sounds
     if (this.player) {
       this.player.cleanup();
@@ -255,8 +303,8 @@ export class PlayingState extends State {
       500   // Between building rows
     );
     
-    // Set camera bounds to world
-    this.game.camera.setBounds(0, 0, this.worldWidth, this.worldHeight);
+    // Set camera bounds to unlocked area only (not full world)
+    this.game.camera.setBounds(0, 0, this.unlockedWorldWidth, this.worldHeight);
     
     // Center camera on player
     this.game.camera.follow(this.player);
@@ -318,6 +366,7 @@ export class PlayingState extends State {
         // Open upgrade selection menu
         this.pendingUpgrades.count--;
         const isBeef = this.pendingUpgrades.isBeefSituation;
+        // Reset beef flag if no more pending
         if (this.pendingUpgrades.count === 0) {
           this.pendingUpgrades.isBeefSituation = false;
         }
@@ -328,6 +377,9 @@ export class PlayingState extends State {
         if (this.bgMusic) {
           this.bgMusic.pause();
         }
+        if (this.beefMusic) {
+          this.beefMusic.pause();
+        }
         this.game.stateManager.pushState('paused');
         return;
       }
@@ -337,6 +389,9 @@ export class PlayingState extends State {
     if (input.isKeyPressed('p')) {
       if (this.bgMusic) {
         this.bgMusic.pause();
+      }
+      if (this.beefMusic) {
+        this.beefMusic.pause();
       }
       this.game.stateManager.pushState('paused');
       return;
@@ -369,6 +424,15 @@ export class PlayingState extends State {
 
     // Check if beef is high - show upgrade options
     this.checkBeefThreshold();
+
+    // Update gradual beef opp spawning
+    this.updateBeefOppSpawning(deltaTime);
+
+    // Update alert notification
+    this.updateAlertNotification(deltaTime);
+
+    // Check if Top Boy was defeated - trigger level progression
+    this.checkTopBoyDefeated();
 
     // Beef no longer causes game over - just caps at 100%
     if (gameData.beefLevel > gameData.maxBeef) {
@@ -467,10 +531,10 @@ export class PlayingState extends State {
 
       heatRate = totalHeatLoot * heatPerLoot;
 
-      // Apply heat dampening from upgrades
-      const heatDampening = this.player?.stats?.heatDampening || this.player?.stats?.chaosDampening || 0;
-      const heatMultiplier = 1 - (heatDampening / 100);
-      gameData.beefLevel += heatRate * deltaTime * heatMultiplier;
+      // Apply beef dampening from upgrades
+      const beefDampening = this.player?.stats?.beefDampening || 0;
+      const beefMultiplier = 1 - (beefDampening / 100);
+      gameData.beefLevel += heatRate * deltaTime * beefMultiplier;
     }
 
     // Passive heat decay when low (helps recovery)
@@ -700,7 +764,54 @@ export class PlayingState extends State {
       ctx.fillText(notificationText, width / 2, notificationY);
       ctx.restore();
     }
-    
+
+    // Alert notification (Top Boy warning, etc.)
+    if (this.alertNotification && this.alertNotification.active) {
+      const alertY = height / 3;
+      const fadeProgress = this.alertNotification.timer / this.alertNotification.duration;
+      let alpha;
+
+      // Fade in for first 0.3 seconds, stay solid, then fade out in last 0.5 seconds
+      if (fadeProgress < 0.1) {
+        alpha = fadeProgress * 10; // Fade in
+      } else if (fadeProgress > 0.8) {
+        alpha = (1 - fadeProgress) * 5; // Fade out
+      } else {
+        alpha = 1; // Solid
+      }
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+
+      // Red warning background
+      ctx.fillStyle = 'rgba(200, 0, 0, 0.9)';
+      const alertWidth = 500;
+      const alertHeight = 60;
+      ctx.fillRect(width / 2 - alertWidth / 2, alertY - alertHeight / 2, alertWidth, alertHeight);
+
+      // White border
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(width / 2 - alertWidth / 2, alertY - alertHeight / 2, alertWidth, alertHeight);
+
+      // Alert text
+      ctx.font = 'bold 28px Arial';
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(this.alertNotification.text, width / 2, alertY);
+
+      ctx.restore();
+    }
+
+    // Top Left - Level indicator
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(15, 15, 100, 40);
+    ctx.font = 'bold 20px Arial';
+    ctx.fillStyle = '#ffcc00';
+    ctx.textAlign = 'center';
+    ctx.fillText(`LEVEL ${this.currentLevel}`, 65, 42);
+
     // Top Right - Timer and Opp Counter
     const timeRemaining = Math.max(0, gameData.targetTime - gameData.elapsedTime);
     const minutes = Math.floor(timeRemaining / 60);
@@ -973,6 +1084,12 @@ export class PlayingState extends State {
       );
 
       const opp = new Opp(this.game, spawnPoint.x, spawnPoint.y, aggressionLevel);
+
+      // When beef is high (60%+), new opps immediately target safe house
+      if (beefLevel >= 60) {
+        opp.targetingSafeHouse = true;
+      }
+
       this.opps.push(opp);
 
       // Reset timer for next spawn
@@ -1172,13 +1289,25 @@ export class PlayingState extends State {
   spawnSlewDem(count) {
     if (!this.player) return;
 
+    // Max 3 allies at a time
+    const maxAllies = 3;
+    const currentAliveAllies = this.allies.filter(a => !a.isDead).length;
+    const slotsAvailable = maxAllies - currentAliveAllies;
+
+    if (slotsAvailable <= 0) {
+      // Already at max allies
+      return;
+    }
+
+    const actualCount = Math.min(count, slotsAvailable);
     const playerX = this.player.getCenterX();
     const playerY = this.player.getCenterY();
 
-    for (let i = 0; i < count; i++) {
-      // Spawn allies in a circle around the player
-      const angle = (i / count) * Math.PI * 2;
-      const distance = 80 + Math.random() * 40;
+    for (let i = 0; i < actualCount; i++) {
+      // Spawn allies in a circle around the player with randomized angles
+      const baseAngle = (i / actualCount) * Math.PI * 2;
+      const angle = baseAngle + (Math.random() - 0.5) * 0.8; // Add randomness to angle
+      const distance = 80 + Math.random() * 60;
       const spawnX = playerX + Math.cos(angle) * distance - 24;
       const spawnY = playerY + Math.sin(angle) * distance - 32;
 
@@ -1189,16 +1318,34 @@ export class PlayingState extends State {
       ally.state = 'hunting'; // Start hunting opps
       ally.health = 100; // Same health as player
       ally.maxHealth = 100;
-      ally.shootCooldown = 1.5; // Faster shooting
-      ally.shootTimer = 0; // Ready to shoot immediately
+
+      // Individualize each ally with different stats
+      ally.shootCooldown = 0.7 + Math.random() * 0.4; // 0.7-1.1 seconds between shots
+      ally.shootTimer = Math.random() * ally.shootCooldown; // Stagger initial shots
+      ally.shootRange = 250 + Math.random() * 100; // 250-350 range
+      ally.chaseSpeed = 80 + Math.random() * 40; // 80-120 speed (different from each other)
+      ally.speed = ally.chaseSpeed;
+
+      // Give each ally a unique patrol offset so they don't stack
+      ally.allyIndex = currentAliveAllies + i;
+      ally.patrolAngleOffset = (ally.allyIndex / maxAllies) * Math.PI * 2 + Math.random() * 0.5;
+      ally.preferredDistance = 60 + Math.random() * 80; // How far they like to stay from player
+      ally.targetSwitchTimer = Math.random() * 3; // Randomize when they switch targets
 
       // Make allies the same size as the player (48x64)
       ally.width = 48;
       ally.height = 64;
+      // Update collision box to match new size
+      ally.collisionBox = {
+        offsetX: 8,
+        offsetY: 16,
+        width: 32,
+        height: 48
+      };
 
-      // Initialize animation
-      ally.animationTimer = 0;
-      ally.animationFrame = 0;
+      // Initialize animation with slight offset so they don't animate in sync
+      ally.animationTimer = Math.random() * 0.2;
+      ally.animationFrame = Math.floor(Math.random() * 2);
       ally.isMoving = false;
 
       this.allies.push(ally);
@@ -1210,10 +1357,19 @@ export class PlayingState extends State {
 
   // Spawn allies at a specific position (when opps die)
   spawnAlliesAtPosition(x, y, count) {
-    for (let i = 0; i < count; i++) {
+    // Max 3 allies at a time
+    const maxAllies = 3;
+    const currentAliveAllies = this.allies.filter(a => !a.isDead).length;
+    const slotsAvailable = maxAllies - currentAliveAllies;
+
+    if (slotsAvailable <= 0) return;
+
+    const actualCount = Math.min(count, slotsAvailable);
+
+    for (let i = 0; i < actualCount; i++) {
       // Spawn allies in a small circle around the position
-      const angle = (i / count) * Math.PI * 2 + Math.random() * 0.5;
-      const distance = 30 + Math.random() * 30;
+      const angle = (i / actualCount) * Math.PI * 2 + Math.random() * 0.8;
+      const distance = 30 + Math.random() * 40;
       const spawnX = x + Math.cos(angle) * distance;
       const spawnY = y + Math.sin(angle) * distance;
 
@@ -1224,92 +1380,70 @@ export class PlayingState extends State {
       ally.state = 'hunting'; // Start hunting opps
       ally.health = 100; // Same health as player
       ally.maxHealth = 100;
-      ally.shootCooldown = 1.5; // Faster shooting
-      ally.shootTimer = 0; // Ready to shoot immediately
+
+      // Individualize each ally
+      ally.shootCooldown = 0.7 + Math.random() * 0.4;
+      ally.shootTimer = Math.random() * ally.shootCooldown;
+      ally.shootRange = 250 + Math.random() * 100;
+      ally.chaseSpeed = 80 + Math.random() * 40;
+      ally.speed = ally.chaseSpeed;
+
+      ally.allyIndex = currentAliveAllies + i;
+      ally.patrolAngleOffset = (ally.allyIndex / maxAllies) * Math.PI * 2 + Math.random() * 0.5;
+      ally.preferredDistance = 60 + Math.random() * 80;
+      ally.targetSwitchTimer = Math.random() * 3;
 
       // Make allies the same size as the player (48x64)
       ally.width = 48;
       ally.height = 64;
+      ally.collisionBox = {
+        offsetX: 8,
+        offsetY: 16,
+        width: 32,
+        height: 48
+      };
 
-      // Initialize animation
-      ally.animationTimer = 0;
-      ally.animationFrame = 0;
+      // Initialize animation with offset
+      ally.animationTimer = Math.random() * 0.2;
+      ally.animationFrame = Math.floor(Math.random() * 2);
       ally.isMoving = false;
 
       this.allies.push(ally);
     }
   }
 
-  // Update allies - they follow player and protect stash, only attack when provoked
+  // Update allies - they actively hunt opps and protect player/stash
   updateAllies(deltaTime) {
     for (const ally of this.allies) {
       if (ally.isDead) continue;
 
-      // Initialize provoked state if not set
-      if (ally.isProvoked === undefined) {
-        ally.isProvoked = false;
-        ally.provokedTimer = 0;
-        ally.targetOpp = null;
+      // Initialize ally shooting range if not set
+      if (!ally.shootRange) {
+        ally.shootRange = 300;
       }
 
-      // Decrease provoked timer
-      if (ally.provokedTimer > 0) {
-        ally.provokedTimer -= deltaTime;
-        if (ally.provokedTimer <= 0) {
-          ally.isProvoked = false;
-          ally.targetOpp = null;
-        }
-      }
-
-      // Check if any opp is attacking player or near safe house
-      let threatOpp = null;
-      let threatDist = Infinity;
+      // Find the nearest opp to attack (allies are ALWAYS aggressive!)
+      let nearestOpp = null;
+      let nearestDist = Infinity;
 
       for (const opp of this.opps) {
         if (opp.isDead || opp.isAlly) continue;
 
-        // Check if opp is near safe house (protecting stash)
-        if (this.safeHouse) {
-          const distToStash = Math.sqrt(
-            Math.pow(opp.getCenterX() - this.safeHouse.getCenterX(), 2) +
-            Math.pow(opp.getCenterY() - this.safeHouse.getCenterY(), 2)
-          );
-          if (distToStash < 150) {
-            const dist = ally.getDistanceTo(opp);
-            if (dist < threatDist) {
-              threatDist = dist;
-              threatOpp = opp;
-              ally.isProvoked = true;
-              ally.provokedTimer = 10; // Stay aggressive for 10 seconds
-            }
-          }
-        }
-
-        // Check if opp is attacking the ally (close and shooting)
-        const distToAlly = ally.getDistanceTo(opp);
-        if (distToAlly < 200 && opp.state === 'chasing') {
-          if (distToAlly < threatDist) {
-            threatDist = distToAlly;
-            threatOpp = opp;
-            ally.isProvoked = true;
-            ally.provokedTimer = 10;
-          }
+        const distToOpp = ally.getDistanceTo(opp);
+        if (distToOpp < nearestDist) {
+          nearestDist = distToOpp;
+          nearestOpp = opp;
         }
       }
 
-      // Use the targeted opp if provoked
-      if (ally.isProvoked && ally.targetOpp && !ally.targetOpp.isDead) {
-        threatOpp = ally.targetOpp;
-        threatDist = ally.getDistanceTo(threatOpp);
-      } else if (threatOpp) {
-        ally.targetOpp = threatOpp;
-      }
+      // Update shoot timer
+      ally.shootTimer -= deltaTime;
 
-      // If provoked and have a target, attack
-      if (ally.isProvoked && threatOpp && threatDist < 400) {
-        // Chase and attack the threat
-        const dx = threatOpp.getCenterX() - ally.getCenterX();
-        const dy = threatOpp.getCenterY() - ally.getCenterY();
+      // If there's an opp within range, attack it!
+      if (nearestOpp && nearestDist < 400) {
+        // Chase and attack the nearest opp
+        const dx = nearestOpp.getCenterX() - ally.getCenterX();
+        const dy = nearestOpp.getCenterY() - ally.getCenterY();
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist > 0) {
@@ -1319,22 +1453,26 @@ export class PlayingState extends State {
           ally.vy = Math.sin(ally.direction) * ally.chaseSpeed;
         }
 
-        // Shoot at threat
-        ally.shootTimer -= deltaTime;
-        if (ally.shootTimer <= 0 && dist < 200) {
+        // Shoot at opp if within shooting range
+        if (ally.shootTimer <= 0 && dist < ally.shootRange) {
           ally.shootTimer = ally.shootCooldown;
-          ally.shootAt(threatOpp);
+          ally.shootAt(nearestOpp);
         }
 
         ally.isMoving = true;
-        ally.x += ally.vx * deltaTime;
-        ally.y += ally.vy * deltaTime;
+
+        // Calculate new position with collision checking
+        const newX = ally.x + ally.vx * deltaTime;
+        const newY = ally.y + ally.vy * deltaTime;
+        const finalPos = this.checkAllyBuildingCollision(ally, newX, newY);
+        ally.x = finalPos.x;
+        ally.y = finalPos.y;
 
         if (Math.abs(ally.vx) > 0.1) {
           ally.facing = ally.vx > 0 ? 'right' : 'left';
         }
       } else {
-        // Not provoked - follow player
+        // No opps nearby - follow player
         if (this.player) {
           const dx = this.player.getCenterX() - ally.getCenterX();
           const dy = this.player.getCenterY() - ally.getCenterY();
@@ -1347,16 +1485,31 @@ export class PlayingState extends State {
             ally.vx = Math.cos(ally.direction) * ally.speed * 0.6;
             ally.vy = Math.sin(ally.direction) * ally.speed * 0.6;
             ally.isMoving = true;
-            ally.x += ally.vx * deltaTime;
-            ally.y += ally.vy * deltaTime;
+
+            // Calculate new position with collision checking
+            const followNewX = ally.x + ally.vx * deltaTime;
+            const followNewY = ally.y + ally.vy * deltaTime;
+            const followFinalPos = this.checkAllyBuildingCollision(ally, followNewX, followNewY);
+            ally.x = followFinalPos.x;
+            ally.y = followFinalPos.y;
+
             if (Math.abs(ally.vx) > 0.1) {
               ally.facing = ally.vx > 0 ? 'right' : 'left';
             }
           } else {
-            // Stay near player, idle
+            // Stay near player, but still look for opps to shoot at distance
             ally.vx = 0;
             ally.vy = 0;
             ally.isMoving = false;
+
+            // Even when idle, shoot at opps within range!
+            if (nearestOpp && nearestDist < ally.shootRange && ally.shootTimer <= 0) {
+              ally.shootTimer = ally.shootCooldown;
+              ally.shootAt(nearestOpp);
+              // Face the target
+              const tdx = nearestOpp.getCenterX() - ally.getCenterX();
+              ally.facing = tdx > 0 ? 'right' : 'left';
+            }
           }
         }
       }
@@ -1373,15 +1526,59 @@ export class PlayingState extends State {
         ally.animationTimer = 0;
       }
 
-      // Keep allies within world bounds
-      if (this.worldWidth && this.worldHeight) {
-        ally.x = Math.max(0, Math.min(this.worldWidth - ally.width, ally.x));
+      // Keep allies within unlocked world bounds
+      if (this.unlockedWorldWidth && this.worldHeight) {
+        ally.x = Math.max(0, Math.min(this.unlockedWorldWidth - ally.width, ally.x));
         ally.y = Math.max(0, Math.min(this.worldHeight - ally.height, ally.y));
       }
     }
 
     // Remove dead allies
     this.allies = this.allies.filter(a => !a.isDead);
+  }
+
+  // Check ally collision with buildings and return valid position
+  checkAllyBuildingCollision(ally, newX, newY) {
+    // Get all buildings (traphouses + safe house)
+    const buildings = [...this.traphouses];
+    if (this.safeHouse) buildings.push(this.safeHouse);
+
+    let canMoveX = true;
+    let canMoveY = true;
+
+    for (const building of buildings) {
+      // Quick bounds check - skip buildings that are far away
+      if (Math.abs(building.x - ally.x) > 150 || Math.abs(building.y - ally.y) > 150) {
+        continue;
+      }
+
+      // Get building collision box
+      const bx = building.x + (building.collisionBox?.offsetX || 0);
+      const by = building.y + (building.collisionBox?.offsetY || 0);
+      const bw = building.collisionBox?.width || building.width;
+      const bh = building.collisionBox?.height || building.height;
+
+      // Check X movement collision
+      if (canMoveX) {
+        const wouldCollideX = newX < bx + bw && newX + ally.width > bx &&
+                              ally.y < by + bh && ally.y + ally.height > by;
+        if (wouldCollideX) canMoveX = false;
+      }
+
+      // Check Y movement collision
+      if (canMoveY) {
+        const wouldCollideY = ally.x < bx + bw && ally.x + ally.width > bx &&
+                              newY < by + bh && newY + ally.height > by;
+        if (wouldCollideY) canMoveY = false;
+      }
+
+      if (!canMoveX && !canMoveY) break;
+    }
+
+    return {
+      x: canMoveX ? newX : ally.x,
+      y: canMoveY ? newY : ally.y
+    };
   }
 
   isPlayerNearBuilding(building, distance) {
@@ -1594,14 +1791,20 @@ export class PlayingState extends State {
 
       // BEEF TRIGGERED! Major consequences:
 
-      // 1. Spawn 15 extra opps at traphouses
-      this.spawnBeefOpps(15);
+      // 1. Switch to beef music
+      this.switchToBeefMusic();
 
-      // 2. Multiply traphouse loot by 4x
+      // 2. Spawn the Top Boy if not already out
+      this.spawnTopBoy();
+
+      // 3. Queue 15 extra opps to spawn gradually from Opp Block
+      this.queueBeefOpps(15);
+
+      // 4. Multiply traphouse loot by 4x
       this.multiplyTraphouseLoot(4);
 
-      // 3. Make all opps target the safe house
-      this.setOppsSafeHouseTarget();
+      // 5. Make all opps (including Opp Block guards) scatter and surround player
+      this.scatterAllOpps();
 
       // Queue beef upgrade selection (player opens with ESC/tap)
       this.pendingUpgrades.count++;
@@ -1611,27 +1814,296 @@ export class PlayingState extends State {
     // Reset flag when beef drops below 40% (so it can trigger again)
     if (gameData.beefLevel < 40) {
       this.beefUpgradeShown = false;
+
+      // Switch back to normal music when beef cools down
+      if (this.isBeefMusicPlaying) {
+        this.switchToNormalMusic();
+      }
     }
   }
 
-  // Spawn extra opps at traphouses when beef is triggered
-  spawnBeefOpps(count) {
-    for (let i = 0; i < count; i++) {
-      // Pick a random traphouse to spawn near
-      if (this.traphouses.length === 0) continue;
+  // Switch to beef music
+  switchToBeefMusic() {
+    if (this.isBeefMusicPlaying) return;
 
-      const traphouse = this.traphouses[Math.floor(Math.random() * this.traphouses.length)];
+    // Pause normal music
+    if (this.bgMusic) {
+      this.bgMusic.pause();
+    }
 
-      // Spawn at random position around the traphouse
-      const angle = Math.random() * Math.PI * 2;
-      const distance = 50 + Math.random() * 50;
-      const spawnX = traphouse.x + traphouse.width / 2 + Math.cos(angle) * distance;
-      const spawnY = traphouse.y + traphouse.height / 2 + Math.sin(angle) * distance;
+    // Play beef music
+    if (this.beefMusic) {
+      this.beefMusic.currentTime = 0;
+      this.beefMusic.play().catch(e => console.log('Beef music play failed:', e));
+    }
 
-      // Create aggressive opp
-      const opp = new Opp(this.game, spawnX, spawnY, 3); // Level 3 aggression
-      opp.targetingSafeHouse = true; // These opps go for the safe house
+    this.isBeefMusicPlaying = true;
+  }
+
+  // Switch back to normal music
+  switchToNormalMusic() {
+    if (!this.isBeefMusicPlaying) return;
+
+    // Pause beef music
+    if (this.beefMusic) {
+      this.beefMusic.pause();
+    }
+
+    // Resume normal music
+    if (this.bgMusic) {
+      this.bgMusic.play().catch(e => console.log('Game music play failed:', e));
+    }
+
+    this.isBeefMusicPlaying = false;
+  }
+
+  // Spawn the Top Boy boss when beef triggers
+  spawnTopBoy() {
+    // Don't spawn if Top Boy is already alive
+    if (this.topBoy && !this.topBoy.isDead) {
+      return;
+    }
+
+    if (!this.oppBlock) return;
+
+    // Spawn Top Boy from the Opp Block
+    const spawnX = this.oppBlock.x + this.oppBlock.width / 2;
+    const spawnY = this.oppBlock.y + this.oppBlock.height / 2;
+
+    const topBoy = new Opp(this.game, spawnX, spawnY, 3);
+
+    // Configure as Top Boy
+    topBoy.isTopBoy = true;
+    topBoy.spriteType = 2; // Use opp2 sprite (leather jacket guy)
+
+    // Same size as player character
+    topBoy.width = 48;
+    topBoy.height = 64;
+
+    // 5x health
+    topBoy.health = 150;
+    topBoy.maxHealth = 150;
+
+    // Aggressive stats
+    topBoy.shootCooldown = 1.0; // Slower cooldown but burst fire
+    topBoy.shootTimer = 0; // Ready to shoot immediately
+    topBoy.shootRange = 400;
+    topBoy.chaseSpeed = 100;
+    topBoy.speed = 100;
+    topBoy.fleeSpeed = 150;
+
+    // Start chasing
+    topBoy.state = 'chasing';
+    topBoy.isChaser = true;
+
+    this.topBoy = topBoy;
+    this.opps.push(topBoy);
+    this.topBoySpawned = true;
+
+    // Show alert
+    this.showAlert('⚠️ THE TOP BOY IS AROUND ⚠️');
+  }
+
+  // Show an alert notification
+  showAlert(text) {
+    this.alertNotification = {
+      active: true,
+      text: text,
+      timer: 0,
+      duration: 3
+    };
+  }
+
+  // Update alert notification
+  updateAlertNotification(deltaTime) {
+    if (!this.alertNotification.active) return;
+
+    this.alertNotification.timer += deltaTime;
+    if (this.alertNotification.timer >= this.alertNotification.duration) {
+      this.alertNotification.active = false;
+    }
+  }
+
+  // Check if Top Boy was defeated and trigger level progression
+  checkTopBoyDefeated() {
+    // Only check if Top Boy was spawned and not already defeated
+    if (!this.topBoySpawned || this.topBoyDefeated) return;
+
+    // Check if Top Boy is dead
+    if (this.topBoy && this.topBoy.isDead) {
+      this.topBoyDefeated = true;
+      this.triggerLevelProgression();
+    }
+  }
+
+  // Trigger level progression when Top Boy is defeated
+  triggerLevelProgression() {
+    this.currentLevel++;
+
+    // Show level complete alert
+    this.showAlert(`🏆 LEVEL ${this.currentLevel - 1} COMPLETE! 🏆`);
+
+    // Expand the world after a short delay
+    setTimeout(() => {
+      this.expandWorld();
+      this.showAlert(`📍 LEVEL ${this.currentLevel} - NEW TERRITORY 📍`);
+    }, 2000);
+  }
+
+  // Expand the world to add new territory
+  expandWorld() {
+    const expansionWidth = 1344; // Same as original world width
+    const oldWorldWidth = this.worldWidth;
+
+    // Expand world bounds to the right
+    this.worldWidth += expansionWidth;
+
+    // Unlock the new area for camera navigation
+    this.unlockedWorldWidth = this.worldWidth;
+
+    // Update camera bounds to match newly unlocked area
+    this.game.camera.setBounds(0, 0, this.unlockedWorldWidth, this.worldHeight);
+
+    // Generate new content in the expanded area
+    this.generateNewLevelContent(oldWorldWidth, expansionWidth);
+
+    // Reset Top Boy for new level
+    this.topBoy = null;
+    this.topBoySpawned = false;
+    this.topBoyDefeated = false;
+
+    // Reset beef for new level challenge
+    this.game.gameData.beefLevel = Math.max(0, this.game.gameData.beefLevel - 30);
+    this.beefUpgradeShown = false;
+
+    console.log(`[LEVEL] World expanded to ${this.worldWidth}x${this.worldHeight}, camera unlocked to ${this.unlockedWorldWidth}`);
+  }
+
+  // Generate new traphouses, Opp Block, and content in expanded area
+  generateNewLevelContent(startX, width) {
+    const centerX = startX + width / 2;
+    const centerY = this.worldHeight / 2;
+
+    // Create new traphouses in the expanded area
+    const newTraphousePositions = [
+      { x: startX + 100, y: 150 },
+      { x: startX + width - 330, y: 150 },
+      { x: startX + 100, y: this.worldHeight - 350 },
+    ];
+
+    const colors = ['red', 'blue', 'green', 'yellow', 'purple', 'orange'];
+
+    for (const pos of newTraphousePositions) {
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      const traphouse = new Traphouse(this.game, pos.x, pos.y, color, 6);
+      this.traphouses.push(traphouse);
+
+      // Add some initial loot to new traphouses
+      for (let i = 0; i < 3; i++) {
+        if (traphouse.hasEmptySlots()) {
+          const lootColor = colors[Math.floor(Math.random() * colors.length)];
+          const loot = new Loot(this.game, 0, 0, lootColor);
+          traphouse.addLoot(loot);
+          this.loot.push(loot);
+        }
+      }
+    }
+
+    // Create new Opp Block in the expanded area (bottom right of new area)
+    const newOppBlock = new Traphouse(
+      this.game,
+      startX + width - 330,
+      this.worldHeight - 350,
+      'red',
+      10
+    );
+    newOppBlock.isOppBlock = true;
+    this.traphouses.push(newOppBlock);
+
+    // Update the Opp Block reference to the new one
+    this.oppBlock = newOppBlock;
+
+    // Spawn new Opp Block guards
+    this.spawnOppBlockGuards(newOppBlock, 4 + this.currentLevel); // More guards each level
+
+    // Spawn some regular opps in the new area
+    for (let i = 0; i < 5 + this.currentLevel * 2; i++) {
+      const oppX = startX + 100 + Math.random() * (width - 200);
+      const oppY = 100 + Math.random() * (this.worldHeight - 200);
+      const aggression = Math.min(3, 1 + Math.floor(this.currentLevel / 2));
+      const opp = new Opp(this.game, oppX, oppY, aggression);
       this.opps.push(opp);
+    }
+
+    // Scatter some loot on the ground in the new area
+    for (let i = 0; i < 10; i++) {
+      const lootX = startX + 100 + Math.random() * (width - 200);
+      const lootY = 100 + Math.random() * (this.worldHeight - 200);
+      const lootColor = colors[Math.floor(Math.random() * colors.length)];
+      const loot = new Loot(this.game, lootX, lootY, lootColor);
+      this.loot.push(loot);
+    }
+  }
+
+  // Spawn guards for an Opp Block
+  spawnOppBlockGuards(oppBlock, count) {
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2;
+      const distance = 80 + Math.random() * 40;
+      const guardX = oppBlock.x + oppBlock.width / 2 + Math.cos(angle) * distance;
+      const guardY = oppBlock.y + oppBlock.height / 2 + Math.sin(angle) * distance;
+
+      const guard = new Opp(this.game, guardX, guardY, 3);
+      guard.isOppBlockGuard = true;
+      guard.guardPatrolCenter = { x: guardX, y: guardY };
+      guard.oppBlock = oppBlock;
+      guard.health = 50; // Guards are tougher
+      guard.maxHealth = 50;
+
+      this.opps.push(guard);
+    }
+  }
+
+  // Queue opps to spawn gradually from Opp Block
+  queueBeefOpps(count) {
+    this.beefOppSpawnQueue.count += count;
+    this.beefOppSpawnQueue.timer = 0; // Start spawning immediately
+  }
+
+  // Update gradual opp spawning from Opp Block
+  updateBeefOppSpawning(deltaTime) {
+    if (this.beefOppSpawnQueue.count <= 0 || !this.oppBlock) return;
+
+    this.beefOppSpawnQueue.timer -= deltaTime;
+
+    if (this.beefOppSpawnQueue.timer <= 0) {
+      // Spawn one opp from the Opp Block
+      const angle = Math.random() * Math.PI * 2;
+      const distance = 30 + Math.random() * 50;
+      const spawnX = this.oppBlock.x + this.oppBlock.width / 2 + Math.cos(angle) * distance;
+      const spawnY = this.oppBlock.y + this.oppBlock.height / 2 + Math.sin(angle) * distance;
+
+      // Create aggressive opp that will surround the player
+      const opp = new Opp(this.game, spawnX, spawnY, 3); // Level 3 aggression
+      opp.isSurrounding = true; // Mark as surrounding opp
+      opp.state = 'chasing'; // Start chasing immediately
+      this.opps.push(opp);
+
+      // Decrement count and reset timer
+      this.beefOppSpawnQueue.count--;
+      this.beefOppSpawnQueue.timer = this.beefOppSpawnQueue.interval;
+    }
+  }
+
+  // Make all opps scatter and try to surround the player
+  scatterAllOpps() {
+    for (const opp of this.opps) {
+      if (!opp.isAlly && !opp.isDead) {
+        opp.isSurrounding = true; // Mark as surrounding mode
+        opp.isOppBlockGuard = false; // Guards leave their post
+        opp.guardPatrolCenter = null; // No more patrolling
+        opp.state = 'chasing'; // Start chasing the player
+      }
     }
   }
 
@@ -1760,8 +2232,11 @@ export class PlayingState extends State {
             // Damage the opp
             opp.takeDamage(projectile.damage);
 
-            // If Chronik killed the opp, increase heat
+            // If Chronik killed the opp, increase heat and track the body
             if (wasAlive && opp.isDead) {
+              // Track the kill
+              this.game.gameData.bodiesDropped++;
+
               if (opp.isOppBlockGuard) {
                 // Killing an Opp Block guard = +70% heat
                 this.game.gameData.beefLevel = Math.min(
@@ -1794,8 +2269,16 @@ export class PlayingState extends State {
           if (opp.isDead || opp.isAlly) continue; // Don't hit allies
 
           if (projectile.collidesWith(opp)) {
+            // Track if opp was alive before damage
+            const wasAlive = !opp.isDead;
+
             // Damage the opp
             opp.takeDamage(projectile.damage);
+
+            // Track the kill if ally killed the opp
+            if (wasAlive && opp.isDead) {
+              this.game.gameData.bodiesDropped++;
+            }
 
             // Apply knockback
             const dir = projectile.getDirectionVector();
@@ -1813,6 +2296,12 @@ export class PlayingState extends State {
         if (projectile.collidesWith(this.player)) {
           // Damage the player
           this.player.takeDamage(projectile.damage);
+
+          // Apply knockback to player (stronger push)
+          const knockbackForce = 250;
+          const dir = projectile.getDirectionVector();
+          this.player.x += dir.x * knockbackForce * 0.016; // Instant push
+          this.player.y += dir.y * knockbackForce * 0.016;
 
           // Provoke all allies when player is hit!
           this.provokeAllAllies();
@@ -1836,14 +2325,16 @@ export class PlayingState extends State {
             // Damage the ally
             ally.takeDamage(projectile.damage);
 
+            // Apply knockback to ally (instant push)
+            const knockbackForce = 80;
+            const dir = projectile.getDirectionVector();
+            ally.x += dir.x * knockbackForce * 0.016;
+            ally.y += dir.y * knockbackForce * 0.016;
+
             // Provoke this ally and others when hit!
             ally.isProvoked = true;
             ally.provokedTimer = 10;
             this.provokeAllAllies();
-
-            // Apply knockback - but handle it manually since we don't call ally.update()
-            ally.vx += projectile.getDirectionVector().x * 100;
-            ally.vy += projectile.getDirectionVector().y * 100;
 
             // Deactivate projectile
             projectile.hit();

@@ -23,8 +23,8 @@ export class Projectile extends Entity {
       this.color = '#FFD700'; // Gold for player
       this.glowColor = 'rgba(255, 215, 0, 0.5)';
     } else {
-      this.color = '#FF4444'; // Red for opps
-      this.glowColor = 'rgba(255, 68, 68, 0.5)';
+      this.color = '#C0C0C0'; // Silver for opps
+      this.glowColor = 'rgba(192, 192, 192, 0.5)';
     }
     this.radius = 8;
     this.pulseTimer = 0;
@@ -118,13 +118,13 @@ export class Projectile extends Entity {
       highlightColor = '#88FFFF';
       shadowColor = '#00CCCC';
     } else if (this.owner === 'opp') {
-      // Red colors for opps
-      smokeColor = 'rgba(255, 100, 100, ';
-      casingColor = '#8B0000';
-      casingStroke = '#5C0000';
-      tipColor = '#FF4444';
-      highlightColor = '#FF6666';
-      shadowColor = '#CC0000';
+      // Silver colors for opps
+      smokeColor = 'rgba(180, 180, 180, ';
+      casingColor = '#808080';
+      casingStroke = '#606060';
+      tipColor = '#C0C0C0';
+      highlightColor = '#E8E8E8';
+      shadowColor = '#909090';
     } else {
       // Gold/copper colors for player
       smokeColor = 'rgba(180, 180, 180, ';

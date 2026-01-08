@@ -25,29 +25,7 @@ export class Traphouse extends Entity {
   }
 
   update(deltaTime) {
-    // Update loot glow - glow when traphouse has loot (player target)
-    if (this.hasLoot()) {
-      // Check if player is nearby
-      const state = this.game.stateManager.currentState;
-      const playerNearby = state && state.player &&
-        this.getDistanceTo(state.player) < 200;
-
-      // Glow more intensely if player is nearby
-      const glowSpeed = playerNearby ? 4 : 2;
-      const maxGlow = playerNearby ? 1 : 0.7;
-      const minGlow = playerNearby ? 0.5 : 0.3;
-
-      this.lootGlow += this.lootGlowDirection * deltaTime * glowSpeed;
-      if (this.lootGlow >= maxGlow) {
-        this.lootGlow = maxGlow;
-        this.lootGlowDirection = -1;
-      } else if (this.lootGlow <= minGlow) {
-        this.lootGlow = minGlow;
-        this.lootGlowDirection = 1;
-      }
-    } else {
-      this.lootGlow = 0;
-    }
+    // No glow updates needed
   }
 
   getDistanceTo(entity) {
@@ -75,23 +53,6 @@ export class Traphouse extends Entity {
       ctx.strokeStyle = '#2d3748';
       ctx.lineWidth = 2;
       ctx.strokeRect(this.x, this.y, this.width, this.height);
-    }
-
-    // Draw color indicator (banner on building)
-    ctx.save();
-    ctx.fillStyle = this.getColorHex();
-    ctx.globalAlpha = 0.8;
-    ctx.fillRect(this.x + 10, this.y + this.height - 20, this.width - 20, 12);
-    ctx.restore();
-
-    // Draw loot indicator (glowing outline when has loot - player target)
-    if (this.hasLoot()) {
-      ctx.save();
-      ctx.globalAlpha = this.lootGlow * 0.6;
-      ctx.strokeStyle = this.getColorHex();
-      ctx.lineWidth = 4;
-      ctx.strokeRect(this.x + 5, this.y + 5, this.width - 10, this.height - 10);
-      ctx.restore();
     }
 
     // Draw loot around the building

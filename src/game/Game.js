@@ -42,8 +42,8 @@ export class Game {
     
     // Game-specific data
     this.gameData = {
-      chaosLevel: 0,
-      maxChaos: 100,
+      beefLevel: 0,
+      maxBeef: 100,
       playerLevel: 1,
       xp: 0,
       xpToNext: 100,
@@ -51,9 +51,9 @@ export class Game {
       targetTime: 30 * 60, // 30 minutes in seconds
       isPaused: false,
       // Stats tracking
-      booksCollected: 0,
-      booksShelved: 0,
-      oppsRepelled: 0
+      lootCollected: 0,
+      lootStashed: 0,
+      bodiesDropped: 0
     };
   }
   
@@ -109,6 +109,11 @@ export class Game {
         opp2Walk: `/sprites/opp2_walk.png${cacheBuster}`,
         opp3Stand: `/sprites/opp3_stand.png${cacheBuster}`,
         opp3Walk: `/sprites/opp3_walk.png${cacheBuster}`,
+        // Top Boy sprites
+        topboyStand: `/sprites/topboy_stand.png${cacheBuster}`,
+        topboyShoot: `/sprites/topboy_shoot.png${cacheBuster}`,
+        topboyShootDown: `/sprites/topboy_shoot_down.png${cacheBuster}`,
+        topboyShootUp: `/sprites/topboy_shoot_up.png${cacheBuster}`,
         // Building sprite (replaces shelf)
         building: `/sprites/building.png${cacheBuster}`
       }

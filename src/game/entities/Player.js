@@ -14,7 +14,7 @@ export class Player extends Entity {
       carrySlots: 5,
       stamina: 100,
       maxStamina: 100,
-      chaosDampening: 0,
+      beefDampening: 0,
       xpMultiplier: 1.0 // For Reading Glasses upgrade
     };
 
@@ -22,7 +22,13 @@ export class Player extends Entity {
     this.health = 100;
     this.maxHealth = 100;
     this.isDead = false;
-    
+
+    // Bulletproof vest system
+    this.hasVest = false;
+    this.vestHealth = 0;
+    this.maxVestHealth = 100;
+    this.vestDamageReduction = 0.5; // 50% damage reduction
+
     // Upgrade tracking
     this.upgradeLevels = {};
     
@@ -138,9 +144,9 @@ export class Player extends Entity {
       this.y = newY;
     }
     
-    // Keep within world bounds
-    if (state && state.worldWidth && state.worldHeight) {
-      this.x = Math.max(0, Math.min(state.worldWidth - this.width, this.x));
+    // Keep within unlocked world bounds (only allow movement in unlocked areas)
+    if (state && state.unlockedWorldWidth && state.worldHeight) {
+      this.x = Math.max(0, Math.min(state.unlockedWorldWidth - this.width, this.x));
       this.y = Math.max(0, Math.min(state.worldHeight - this.height, this.y));
     }
     
@@ -398,11 +404,37 @@ export class Player extends Entity {
   takeDamage(amount) {
     if (this.isDead) return;
 
-    this.health -= amount;
+    let actualDamage = amount;
+
+    // If wearing vest, reduce damage and absorb with vest
+    if (this.hasVest && this.vestHealth > 0) {
+      // Vest absorbs 50% of damage
+      const vestAbsorb = amount * this.vestDamageReduction;
+      actualDamage = amount - vestAbsorb;
+
+      // Damage the vest
+      this.vestHealth -= vestAbsorb;
+
+      // Check if vest is destroyed
+      if (this.vestHealth <= 0) {
+        this.vestHealth = 0;
+        this.hasVest = false;
+        this.vestBroken = true; // Flag for UI notification
+      }
+    }
+
+    this.health -= actualDamage;
     if (this.health <= 0) {
       this.health = 0;
       this.isDead = true;
     }
+  }
+
+  // Equip a new bulletproof vest
+  equipVest() {
+    this.hasVest = true;
+    this.vestHealth = this.maxVestHealth;
+    this.vestBroken = false;
   }
 
   pickupLoot(item) {
@@ -448,8 +480,8 @@ export class Player extends Entity {
         this.stats.maxStamina += amount;
         this.stats.stamina += amount;
         break;
-      case 'chaosDampening':
-        this.stats.chaosDampening += amount;
+      case 'beefDampening':
+        this.stats.beefDampening += amount;
         break;
       case 'xpMultiplier':
         this.stats.xpMultiplier += amount;

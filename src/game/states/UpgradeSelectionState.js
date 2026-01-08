@@ -18,15 +18,18 @@ export class UpgradeSelectionState extends State {
     // Check if this is a beef situation
     this.isBeefSituation = data.isBeefSituation || false;
 
-    // Get player's current upgrades
-    const player = this.game.stateManager.getState('playing')?.player;
+    // Get player's current upgrades and ally count
+    const playingState = this.game.stateManager.getState('playing');
+    const player = playingState?.player;
     const playerUpgrades = player?.upgradeLevels || {};
+    const currentAllyCount = playingState?.allies?.filter(a => !a.isDead).length || 0;
 
-    // Get upgrades - beef situation includes Slew Dem option
+    // Get upgrades - beef situation includes Slew Dem option (if not at max allies)
+    // Pass player to filter vest upgrade if player already has a vest
     if (this.isBeefSituation) {
-      this.upgrades = getBeefUpgrades(3, playerUpgrades);
+      this.upgrades = getBeefUpgrades(3, playerUpgrades, currentAllyCount, player);
     } else {
-      this.upgrades = getRandomUpgrades(3, playerUpgrades);
+      this.upgrades = getRandomUpgrades(3, playerUpgrades, false, player);
     }
     
     // If no upgrades available, skip
@@ -40,9 +43,8 @@ export class UpgradeSelectionState extends State {
     this.selectedIndex = 0;
     this.animationTimer = 0;
 
-    // Reset keyboard tracking state
-    this.keyDebounce = 0.3; // Initial debounce to prevent accidental selection
-    this.lastKeyState = {};
+    // Short debounce to prevent accidental selection from key held during transition
+    this.keyDebounce = 0.1;
 
     // Ensure canvas has keyboard focus for arrow key navigation
     this.game.inputManager.ensureFocus();
@@ -72,59 +74,43 @@ export class UpgradeSelectionState extends State {
     // Update animation
     this.animationTimer += deltaTime;
 
-    // Initialize key tracking if not set
-    if (this.keyDebounce === undefined) {
-      this.keyDebounce = 0;
-      this.lastKeyState = {};
-    }
-
     // Decrease debounce timer
     if (this.keyDebounce > 0) {
       this.keyDebounce -= deltaTime;
+      return; // Skip input processing during debounce
     }
 
-    // Track key states for manual press detection
-    const leftDown = input.isKeyDown('ArrowLeft') || input.isKeyDown('a');
-    const rightDown = input.isKeyDown('ArrowRight') || input.isKeyDown('d');
-    const confirmDown = input.isKeyDown('Enter') || input.isKeyDown(' ');
-
-    // Left arrow - check for new press (wasn't down last frame)
-    if (leftDown && !this.lastKeyState.left && this.keyDebounce <= 0) {
+    // Left arrow - use isKeyPressed for reliable single press detection
+    if (input.isKeyPressed('ArrowLeft') || input.isKeyPressed('a') || input.isKeyPressed('A')) {
       console.log('Left arrow pressed, changing selection');
       this.selectedIndex = Math.max(0, this.selectedIndex - 1);
       this.playSelectSound();
-      this.keyDebounce = 0.2; // 200ms debounce
+      this.keyDebounce = 0.15;
     }
 
-    // Right arrow - check for new press
-    if (rightDown && !this.lastKeyState.right && this.keyDebounce <= 0) {
+    // Right arrow
+    if (input.isKeyPressed('ArrowRight') || input.isKeyPressed('d') || input.isKeyPressed('D')) {
       console.log('Right arrow pressed, changing selection');
       this.selectedIndex = Math.min(this.upgrades.length - 1, this.selectedIndex + 1);
       this.playSelectSound();
-      this.keyDebounce = 0.2;
+      this.keyDebounce = 0.15;
     }
 
-    // Enter/Space - check for new press
-    if (confirmDown && !this.lastKeyState.confirm && this.keyDebounce <= 0) {
+    // Enter/Space to confirm
+    if (input.isKeyPressed('Enter') || input.isKeyPressed(' ')) {
       console.log('Enter/Space pressed, selecting upgrade');
       this.selectUpgrade();
-      return; // Exit after selection
+      return;
     }
-
-    // Update last key states
-    this.lastKeyState.left = leftDown;
-    this.lastKeyState.right = rightDown;
-    this.lastKeyState.confirm = confirmDown;
 
     // Number key shortcuts (1, 2, 3)
     for (let i = 0; i < this.upgrades.length; i++) {
-      const numKeyDown = input.isKeyDown((i + 1).toString());
-      if (numKeyDown && !this.lastKeyState[`num${i}`] && this.keyDebounce <= 0) {
+      if (input.isKeyPressed((i + 1).toString())) {
+        console.log(`Number ${i + 1} pressed, selecting upgrade`);
         this.selectedIndex = i;
         this.selectUpgrade();
         return;
       }
-      this.lastKeyState[`num${i}`] = numKeyDown;
     }
     
     // Mouse support

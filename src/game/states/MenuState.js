@@ -440,7 +440,7 @@ export class MenuState extends State {
       '',
       'CONTROLS:',
       'WASD/Arrow Keys - Move',
-      'Shift - Shoot',
+      'Space - Shoot',
       'P/Escape - Pause',
       '',
       'MOBILE: Swipe to move, tap to shoot',

@@ -57,7 +57,7 @@ export class GameOverState extends State {
       beefLevel: Math.floor(gameData.beefLevel),
       lootCollected: gameData.lootCollected || 0,
       lootStashed: gameData.lootStashed || 0,
-      oppsRepelled: gameData.oppsRepelled || 0,
+      bodiesDropped: gameData.bodiesDropped || 0,
     };
   }
   
@@ -227,7 +227,7 @@ export class GameOverState extends State {
       `Peak Beef: ${this.stats.beefLevel}%`,
       `Loot Collected: ${this.stats.lootCollected}`,
       `Loot Stashed: ${this.stats.lootStashed}`,
-      `Bodies: ${this.stats.oppsRepelled}`
+      `Bodies Dropped: ${this.stats.bodiesDropped}`
     ];
     
     statLines.forEach(line => {

@@ -57,9 +57,9 @@ export class InputManager {
       ['moveDown', ['s', 'S', 'ArrowDown']],
       ['moveLeft', ['a', 'A', 'ArrowLeft']],
       ['moveRight', ['d', 'D', 'ArrowRight']],
-      ['shoot', ['Shift']],
+      ['shoot', [' ']],
       ['pause', ['p', 'P', 'Escape']],
-      ['interact', [' ', 'e', 'E']]
+      ['interact', ['e', 'E']]
     ]);
     
     // Make canvas focusable
