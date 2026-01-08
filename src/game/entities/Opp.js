@@ -63,9 +63,9 @@ export class Opp extends Entity {
     this.isDead = false;
 
     // Shooting system
-    this.shootCooldown = 2.5; // seconds between shots (slower than player)
-    this.shootTimer = Math.random() * 2; // Randomize initial cooldown
-    this.shootRange = 250; // Only shoot when player is within range
+    this.shootCooldown = 1.2; // seconds between shots (aggressive shooting!)
+    this.shootTimer = Math.random() * 1; // Randomize initial cooldown (faster start)
+    this.shootRange = 350; // Shoot from further away
 
     // Opp Block guard properties (set externally if this is a guard)
     this.isOppBlockGuard = false;

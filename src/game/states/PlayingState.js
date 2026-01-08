@@ -1106,8 +1106,9 @@ export class PlayingState extends State {
       ally.state = 'hunting'; // Start hunting opps
       ally.health = 100; // Same health as player
       ally.maxHealth = 100;
-      ally.shootCooldown = 1.5; // Faster shooting
+      ally.shootCooldown = 0.8; // Very fast shooting - aggressive allies!
       ally.shootTimer = 0; // Ready to shoot immediately
+      ally.shootRange = 300; // Shoot from further away
 
       // Make allies the same size as the player (48x64)
       ally.width = 48;
@@ -1141,8 +1142,9 @@ export class PlayingState extends State {
       ally.state = 'hunting'; // Start hunting opps
       ally.health = 100; // Same health as player
       ally.maxHealth = 100;
-      ally.shootCooldown = 1.5; // Faster shooting
+      ally.shootCooldown = 0.8; // Very fast shooting - aggressive allies!
       ally.shootTimer = 0; // Ready to shoot immediately
+      ally.shootRange = 300; // Shoot from further away
 
       // Make allies the same size as the player (48x64)
       ally.width = 48;
@@ -1157,76 +1159,38 @@ export class PlayingState extends State {
     }
   }
 
-  // Update allies - they follow player and protect stash, only attack when provoked
+  // Update allies - they actively hunt opps and protect player/stash
   updateAllies(deltaTime) {
     for (const ally of this.allies) {
       if (ally.isDead) continue;
 
-      // Initialize provoked state if not set
-      if (ally.isProvoked === undefined) {
-        ally.isProvoked = false;
-        ally.provokedTimer = 0;
-        ally.targetOpp = null;
+      // Initialize ally shooting range if not set
+      if (!ally.shootRange) {
+        ally.shootRange = 300;
       }
 
-      // Decrease provoked timer
-      if (ally.provokedTimer > 0) {
-        ally.provokedTimer -= deltaTime;
-        if (ally.provokedTimer <= 0) {
-          ally.isProvoked = false;
-          ally.targetOpp = null;
-        }
-      }
-
-      // Check if any opp is attacking player or near safe house
-      let threatOpp = null;
-      let threatDist = Infinity;
+      // Find the nearest opp to attack (allies are ALWAYS aggressive!)
+      let nearestOpp = null;
+      let nearestDist = Infinity;
 
       for (const opp of this.opps) {
         if (opp.isDead || opp.isAlly) continue;
 
-        // Check if opp is near safe house (protecting stash)
-        if (this.safeHouse) {
-          const distToStash = Math.sqrt(
-            Math.pow(opp.getCenterX() - this.safeHouse.getCenterX(), 2) +
-            Math.pow(opp.getCenterY() - this.safeHouse.getCenterY(), 2)
-          );
-          if (distToStash < 150) {
-            const dist = ally.getDistanceTo(opp);
-            if (dist < threatDist) {
-              threatDist = dist;
-              threatOpp = opp;
-              ally.isProvoked = true;
-              ally.provokedTimer = 10; // Stay aggressive for 10 seconds
-            }
-          }
-        }
-
-        // Check if opp is attacking the ally (close and shooting)
-        const distToAlly = ally.getDistanceTo(opp);
-        if (distToAlly < 200 && opp.state === 'chasing') {
-          if (distToAlly < threatDist) {
-            threatDist = distToAlly;
-            threatOpp = opp;
-            ally.isProvoked = true;
-            ally.provokedTimer = 10;
-          }
+        const distToOpp = ally.getDistanceTo(opp);
+        if (distToOpp < nearestDist) {
+          nearestDist = distToOpp;
+          nearestOpp = opp;
         }
       }
 
-      // Use the targeted opp if provoked
-      if (ally.isProvoked && ally.targetOpp && !ally.targetOpp.isDead) {
-        threatOpp = ally.targetOpp;
-        threatDist = ally.getDistanceTo(threatOpp);
-      } else if (threatOpp) {
-        ally.targetOpp = threatOpp;
-      }
+      // Update shoot timer
+      ally.shootTimer -= deltaTime;
 
-      // If provoked and have a target, attack
-      if (ally.isProvoked && threatOpp && threatDist < 400) {
-        // Chase and attack the threat
-        const dx = threatOpp.getCenterX() - ally.getCenterX();
-        const dy = threatOpp.getCenterY() - ally.getCenterY();
+      // If there's an opp within range, attack it!
+      if (nearestOpp && nearestDist < 400) {
+        // Chase and attack the nearest opp
+        const dx = nearestOpp.getCenterX() - ally.getCenterX();
+        const dy = nearestOpp.getCenterY() - ally.getCenterY();
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist > 0) {
@@ -1236,11 +1200,10 @@ export class PlayingState extends State {
           ally.vy = Math.sin(ally.direction) * ally.chaseSpeed;
         }
 
-        // Shoot at threat
-        ally.shootTimer -= deltaTime;
-        if (ally.shootTimer <= 0 && dist < 200) {
+        // Shoot at opp if within shooting range
+        if (ally.shootTimer <= 0 && dist < ally.shootRange) {
           ally.shootTimer = ally.shootCooldown;
-          ally.shootAt(threatOpp);
+          ally.shootAt(nearestOpp);
         }
 
         ally.isMoving = true;
@@ -1251,7 +1214,7 @@ export class PlayingState extends State {
           ally.facing = ally.vx > 0 ? 'right' : 'left';
         }
       } else {
-        // Not provoked - follow player
+        // No opps nearby - follow player
         if (this.player) {
           const dx = this.player.getCenterX() - ally.getCenterX();
           const dy = this.player.getCenterY() - ally.getCenterY();
@@ -1270,10 +1233,19 @@ export class PlayingState extends State {
               ally.facing = ally.vx > 0 ? 'right' : 'left';
             }
           } else {
-            // Stay near player, idle
+            // Stay near player, but still look for opps to shoot at distance
             ally.vx = 0;
             ally.vy = 0;
             ally.isMoving = false;
+
+            // Even when idle, shoot at opps within range!
+            if (nearestOpp && nearestDist < ally.shootRange && ally.shootTimer <= 0) {
+              ally.shootTimer = ally.shootCooldown;
+              ally.shootAt(nearestOpp);
+              // Face the target
+              const tdx = nearestOpp.getCenterX() - ally.getCenterX();
+              ally.facing = tdx > 0 ? 'right' : 'left';
+            }
           }
         }
       }
