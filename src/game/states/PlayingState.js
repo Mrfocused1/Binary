@@ -335,7 +335,6 @@ export class PlayingState extends State {
 
     // Check for tap on pending upgrades indicator (mobile support)
     if (this.pendingUpgrades && this.pendingUpgrades.count > 0) {
-      const mousePos = input.getMousePosition();
       const { width } = this.game;
       // Calculate indicator bounds EXACTLY as in renderUI
       const isMobileView = width <= 900 || this.game.inputManager?.isMobile;
@@ -354,10 +353,28 @@ export class PlayingState extends State {
       const indicatorWidth = timerWidth + 40 * scale;
       const indicatorHeight = 40 * scale;
 
+      // Check for mobile tap first (more reliable)
+      const menuTap = input.getMenuTap ? input.getMenuTap() : null;
+      if (menuTap) {
+        if (menuTap.x >= indicatorX && menuTap.x <= indicatorX + indicatorWidth &&
+            menuTap.y >= indicatorY && menuTap.y <= indicatorY + indicatorHeight) {
+          // Tapped on upgrade indicator - open upgrade menu
+          this.pendingUpgrades.count--;
+          const isBeef = this.pendingUpgrades.isBeefSituation;
+          if (this.pendingUpgrades.count === 0) {
+            this.pendingUpgrades.isBeefSituation = false;
+          }
+          this.game.stateManager.pushState('upgradeSelection', { isBeefSituation: isBeef });
+          return;
+        }
+      }
+
+      // Also check mouse click (for desktop)
+      const mousePos = input.getMousePosition();
       if (mousePos && input.isMouseButtonPressed(0)) {
         if (mousePos.x >= indicatorX && mousePos.x <= indicatorX + indicatorWidth &&
             mousePos.y >= indicatorY && mousePos.y <= indicatorY + indicatorHeight) {
-          // Tapped on upgrade indicator - open upgrade menu
+          // Clicked on upgrade indicator - open upgrade menu
           this.pendingUpgrades.count--;
           const isBeef = this.pendingUpgrades.isBeefSituation;
           if (this.pendingUpgrades.count === 0) {

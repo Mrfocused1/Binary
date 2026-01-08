@@ -114,20 +114,34 @@ export class UpgradeSelectionState extends State {
       }
     }
 
-    // Mouse/touch support - use same responsive calculations as render
+    // Calculate scale for mobile (same as render)
+    const isMobile = input.isMobile || width <= 900;
+    const scale = isMobile ? Math.min(height / 500, 0.8) : 1;
+
+    const cardWidth = 200 * scale;
+    const cardHeight = 250 * scale;
+    const cardSpacing = 20 * scale;
+    const totalWidth = this.upgrades.length * cardWidth + (this.upgrades.length - 1) * cardSpacing;
+    const startX = (width - totalWidth) / 2;
+    const cardY = isMobile ? 80 * scale : 200;
+
+    // Check for mobile tap first (more reliable on touch devices)
+    const menuTap = input.getMenuTap ? input.getMenuTap() : null;
+    if (menuTap) {
+      for (let i = 0; i < this.upgrades.length; i++) {
+        const cardX = startX + i * (cardWidth + cardSpacing);
+        if (menuTap.x >= cardX && menuTap.x < cardX + cardWidth &&
+            menuTap.y >= cardY && menuTap.y < cardY + cardHeight) {
+          this.selectedIndex = i;
+          this.selectUpgrade();
+          return;
+        }
+      }
+    }
+
+    // Mouse support (for desktop)
     const mousePos = input.getMousePosition();
     if (mousePos) {
-      // Calculate scale for mobile (same as render)
-      const isMobile = input.isMobile || width <= 900;
-      const scale = isMobile ? Math.min(height / 500, 0.8) : 1;
-
-      const cardWidth = 200 * scale;
-      const cardHeight = 250 * scale;
-      const cardSpacing = 20 * scale;
-      const totalWidth = this.upgrades.length * cardWidth + (this.upgrades.length - 1) * cardSpacing;
-      const startX = (width - totalWidth) / 2;
-      const cardY = isMobile ? 80 * scale : 200;
-
       for (let i = 0; i < this.upgrades.length; i++) {
         const cardX = startX + i * (cardWidth + cardSpacing);
         if (mousePos.x >= cardX && mousePos.x < cardX + cardWidth &&
